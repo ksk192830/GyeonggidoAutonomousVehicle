@@ -1,0 +1,11 @@
+build/
+log/
+install/
+convenient/image/
+src/.vscode/
+__pycache__/
+*.pyc
+
+*.png
+*.jpg
+*.jpeg
