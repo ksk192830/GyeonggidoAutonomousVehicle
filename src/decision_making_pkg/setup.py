@@ -23,6 +23,7 @@ setup(
             'motion = decision_making_pkg.motion:main',
             'motion_mission = decision_making_pkg.motion_mission:main',
             'motion_parking = decision_making_pkg.motion_parking:main',
+            'parking_map_viz = decision_making_pkg.parking_map_viz:main',
         ],
     },
 )
