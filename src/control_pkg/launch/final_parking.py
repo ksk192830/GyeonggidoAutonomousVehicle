@@ -27,8 +27,8 @@ def generate_launch_description():
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
 
-                {'timer_period': 0.03},  # float형으로, fps조절 
-                # {'timer_period': 1.0},
+                # {'timer_period': 0.03},  # float형으로, fps조절 
+                {'timer_period': 1.0},
             ]
         ),
         
@@ -52,6 +52,19 @@ def generate_launch_description():
                 ('seg_vis', '/cam0/seg_vis')  
             ]
         ),
+
+        #################### CAMERA1 detection ######################
+        Node(
+            package="camera_pkg",           
+            executable="parking_front_detect",
+            name="parking_front_detect",
+            output="screen",
+            parameters=[{
+                "image_topic": "/cam0/image_raw",
+                "detection_topic": "/cam0/detections",
+                "viz_topic": "/front_viz",
+            }],
+        ),
         
 
         #################### CAMERA2(후방) ######################
@@ -71,8 +84,8 @@ def generate_launch_description():
                 {'window_name': 'Raw 1'},
                 {'show_image': False},
 
-                {'timer_period': 0.03},  # float형으로, fps조절 
-                # {'timer_period': 1.0},
+                # {'timer_period': 0.03},  # float형으로, fps조절 
+                {'timer_period': 1.0},
             ]
         ),
         
@@ -97,31 +110,47 @@ def generate_launch_description():
             ]
         ),
 
-        #################### LIDAR SCAN ######################
+        #################### PARKING MAP VIZ ######################
         Node(
-            package='lidar_pkg',              # 라이다 패키지 이름
-            executable='scan',          # setup.cfg에 등록한 이름 사용!
-            name='lidar_scan',
-            output='screen',
-            parameters=[
-                {'pub_topic': '/scan_raw'},    # MotionNode에서 구독하는 토픽 이름과 맞추기
-                {'lidar_port': '/dev/ttyUSB0'},
-            ]
+            package="decision_making_pkg",
+            executable="parking_map_viz",   # ← 노드 파일명
+            name="parking_map_viz",
+            output="screen",
+            parameters=[{
+                "yaml_path": "/home/sg/gyeonggi_ws/src/decision_making_pkg/decision_making_pkg/config/parking_map.yaml",
+                "frame_id": "map",
+                "topic": "/parking_map/markers",
+
+                "show_parking_lot": True,
+                "selected_slot_id": "slot_02",   # "" 이면 전체 표시
+            }]
         ),
-        #################### LIDAR Cluster ######################
-        Node(
-            package='lidar_pkg',          # your package name
-            executable='scan_cluster',        # entry in setup.py console_scripts
-            name='scan_cluster',
-            output='screen',
-            parameters=[
-                {
-                    'sub_topic': 'scan_raw',
-                    'window_name': 'Lidar Scan Viewer',
-                    'enable_viz': True    # or False to disable OpenCV
-                }
-            ]
-        ),
+
+        # #################### LIDAR SCAN ######################
+        # Node(
+        #     package='lidar_pkg',              # 라이다 패키지 이름
+        #     executable='scan',          # setup.cfg에 등록한 이름 사용!
+        #     name='lidar_scan',
+        #     output='screen',
+        #     parameters=[
+        #         {'pub_topic': '/scan_raw'},    # MotionNode에서 구독하는 토픽 이름과 맞추기
+        #         {'lidar_port': '/dev/ttyUSB0'},
+        #     ]
+        # ),
+        # #################### LIDAR Cluster ######################
+        # Node(
+        #     package='lidar_pkg',          # your package name
+        #     executable='scan_cluster',        # entry in setup.py console_scripts
+        #     name='scan_cluster',
+        #     output='screen',
+        #     parameters=[
+        #         {
+        #             'sub_topic': 'scan_raw',
+        #             'window_name': 'Lidar Scan Viewer',
+        #             'enable_viz': True    # or False to disable OpenCV
+        #         }
+        #     ]
+        # ),
 
         #################### 주차 로직 ######################
          
