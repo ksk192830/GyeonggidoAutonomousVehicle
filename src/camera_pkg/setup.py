@@ -33,6 +33,7 @@ setup(
              'lane = camera_pkg.lane_detect:main',
              'obstacle = camera_pkg.obstacle:main',
              'image_saver = camera_pkg.image_saver:main',
+             'parking_front_detect = camera_pkg.parking_front_detect:main',
              
         ],
     },
