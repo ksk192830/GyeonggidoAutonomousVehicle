@@ -2,7 +2,9 @@ build/
 log/
 install/
 convenient/image/
+convenient/img/
 src/.vscode/
+src/camera_pkg/camera_pkg/lib/
 __pycache__/
 *.pyc
 
