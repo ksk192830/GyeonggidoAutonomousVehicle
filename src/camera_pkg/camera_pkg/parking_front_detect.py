@@ -31,7 +31,7 @@ class ParkingFrontDetect(Node):
         )
         self.declare_parameter(
             "persp_dst",
-            [0.40, 1.0, 0.60, 1.0, 0.6, 0.8, 0.4, 0.8],
+            [0.40, 1.0, 0.60, 1.0, 0.6, 0.6, 0.4, 0.6],
         )
 
         self.declare_parameter("morph_kernel", 7)
@@ -59,11 +59,16 @@ class ParkingFrontDetect(Node):
         self.declare_parameter("space_force_convex", True)
         self.declare_parameter("convex_max_area_growth", 5)
 
-        # === ADD: visualize BEV cut boundary (valid area) ===
+        # visualize BEV cut boundary (valid area)
         self.declare_parameter("draw_bev_cut_boundary", True)
         self.declare_parameter("bev_cut_boundary_thickness", 2)
-        self.declare_parameter("bev_cut_boundary_color_bgr", [0, 255, 255])  # yellow
-        self.declare_parameter("bev_cut_boundary_min_y_ratio", 0.5)  # ignore contours above this (like lane code)
+        self.declare_parameter("bev_cut_boundary_color_bgr", [0, 255, 255])
+        self.declare_parameter("bev_cut_boundary_min_y_ratio", 0.5)
+
+        # === ADD: background BEV image overlay ===
+        # 0.0 = no background, 1.0 = only background
+        self.declare_parameter("bg_enable", True)
+        self.declare_parameter("bg_opacity", 0.55)
 
         image_topic = self.get_parameter("image_topic").value
         detection_topic = self.get_parameter("detection_topic").value
@@ -258,7 +263,6 @@ class ParkingFrontDetect(Node):
         union = cv2.morphologyEx(union, cv2.MORPH_OPEN, kern)
         return union
 
-    # === ADD: compute valid-area mask (BEV) and draw its boundary ===
     def _draw_bev_cut_boundary(self, bev_bgr: np.ndarray, M: np.ndarray, w: int, h: int):
         if not bool(self.get_parameter("draw_bev_cut_boundary").value):
             return
@@ -288,8 +292,28 @@ class ParkingFrontDetect(Node):
                 continue
             cv2.drawContours(bev_bgr, [cnt], -1, color, thickness)
 
-        # optional outer border (same as lane code rectangle)
         cv2.rectangle(bev_bgr, (0, 0), (w - 1, h - 1), color, thickness)
+
+    # === ADD: make BEV background from image_raw and alpha blend ===
+    def _make_bev_background(self, frame_bgr: np.ndarray, M: np.ndarray, w: int, h: int) -> np.ndarray:
+        bg = cv2.warpPerspective(
+            frame_bgr,
+            M,
+            (w, h),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(0, 0, 0),
+        )
+        return bg
+
+    @staticmethod
+    def _alpha_blend(base_bgr: np.ndarray, overlay_bgr: np.ndarray, opacity: float) -> np.ndarray:
+        a = float(np.clip(opacity, 0.0, 1.0))
+        if a <= 0.0:
+            return overlay_bgr
+        if a >= 1.0:
+            return base_bgr
+        return cv2.addWeighted(base_bgr, a, overlay_bgr, 1.0 - a, 0.0)
 
     def sync_callback(self, img_msg: Image, det_msg: DetectionArray):
         try:
@@ -386,18 +410,30 @@ class ParkingFrontDetect(Node):
         space_bev = cv2.bitwise_and(space_bev, union_bev)
         lot_bev = union_bev
 
-        bev = np.zeros((h, w, 3), np.uint8)
-        bev[lot_bev > 0] = (255, 255, 255)
-        bev[space_bev > 0] = (255, 0, 0)
-        bev[out_bev > 0] = (0, 0, 255)
+        # --- build overlay layer (segmentation visualization) ---
+        overlay = np.zeros((h, w, 3), np.uint8)
+        overlay[lot_bev > 0] = (255, 255, 255)
+        overlay[space_bev > 0] = (255, 0, 0)
+        overlay[out_bev > 0] = (0, 0, 255)
 
-        # === ADD: draw BEV cut boundary due to perspective warp ===
-        self._draw_bev_cut_boundary(bev, M, w, h)
+        # boundary + edges on overlay
+        self._draw_bev_cut_boundary(overlay, M, w, h)
 
         if bool(self.get_parameter("draw_simplified_edges").value):
-            self._draw_polys(bev, lot_polys, (0, 255, 255), thickness=2)
-            self._draw_polys(bev, space_polys, (0, 255, 0), thickness=2)
-            self._draw_polys(bev, union_polys, (255, 0, 255), thickness=2)
+            self._draw_polys(overlay, lot_polys, (0, 255, 255), thickness=2)
+            self._draw_polys(overlay, space_polys, (0, 255, 0), thickness=2)
+            self._draw_polys(overlay, union_polys, (255, 0, 255), thickness=2)
+
+        # --- background BEV from image_raw ---
+        bg_enable = bool(self.get_parameter("bg_enable").value)
+        bg_opacity = float(self.get_parameter("bg_opacity").value)
+
+        if bg_enable and bg_opacity > 0.001:
+            bev_bg = self._make_bev_background(frame, M, w, h)
+            # final = bg_opacity * bev_bg + (1-bg_opacity) * overlay
+            bev = self._alpha_blend(bev_bg, overlay, bg_opacity)
+        else:
+            bev = overlay
 
         out_msg = self.bridge.cv2_to_imgmsg(bev, encoding="bgr8")
         out_msg.header = img_msg.header
