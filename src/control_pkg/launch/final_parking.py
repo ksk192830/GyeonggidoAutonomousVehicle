@@ -28,7 +28,7 @@ def generate_launch_description():
                 {'show_image': False},
 
                 # {'timer_period': 0.03},  # float형으로, fps조절 
-                {'timer_period': 1.0},
+                {'timer_period': 0.5},
             ]
         ),
         
@@ -79,13 +79,13 @@ def generate_launch_description():
                 # {'rotate_mode': 1},
 
                 {'cam_num': 4},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear'},
+                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_test'},
                 {'pub_topic': '/cam1/image_raw'},
                 {'window_name': 'Raw 1'},
                 {'show_image': False},
 
                 # {'timer_period': 0.03},  # float형으로, fps조절 
-                {'timer_period': 1.0},
+                {'timer_period': 0.5},
             ]
         ),
         
@@ -108,6 +108,19 @@ def generate_launch_description():
                 ('detections', '/cam1/detections'),
                 ('seg_vis', '/cam1/seg_vis')  
             ]
+        ),
+
+        #################### CAMERA2 detection ######################
+        Node(
+            package="camera_pkg",           
+            executable="parking_rear_detect",
+            name="parking_rear_detect",
+            output="screen",
+            parameters=[{
+                "image_topic": "/cam1/image_raw",
+                "detection_topic": "/cam1/detections",
+                "viz_topic": "/rear_viz",
+            }],
         ),
 
         #################### PARKING MAP VIZ ######################

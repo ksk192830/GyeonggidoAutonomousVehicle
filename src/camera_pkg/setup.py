@@ -34,6 +34,7 @@ setup(
              'obstacle = camera_pkg.obstacle:main',
              'image_saver = camera_pkg.image_saver:main',
              'parking_front_detect = camera_pkg.parking_front_detect:main',
+             'parking_rear_detect = camera_pkg.parking_rear_detect:main',
              
         ],
     },
