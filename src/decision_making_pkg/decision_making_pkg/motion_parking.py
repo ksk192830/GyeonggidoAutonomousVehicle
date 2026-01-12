@@ -31,6 +31,11 @@ class ParkingNode(Node):
         self.parking_space_found_num = 0
         self.parking_space_required_num = 5
 
+        self.parking_line_found = False
+        self.parking_space_found = False
+        self.end_line_found = False
+        self.out_line_found = False
+
         # Parking State
         self.state = "SEARCHING_SPACE"
 
@@ -40,7 +45,7 @@ class ParkingNode(Node):
         self.create_subscription(ParkingLot, "/front_parking_line", self.parking_line_callback, 10)
         self.create_subscription(OutLine, "/front_out_line", self.out_line_callback, 10)
         self.create_subscription(ParkingSpace, "/rear_parking_space", self.parking_space_callback, 10)
-        self.create_subscription(EndLine, "/rear_end_line", self.end__line_callback, 10)
+        self.create_subscription(EndLine, "/rear_end_line", self.end_line_callback, 10)
 
         # Publisher
         self.cmd_pub = self.create_publisher(MotionCommand, "/motion_command", 10)
