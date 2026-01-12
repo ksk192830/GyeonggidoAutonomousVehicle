@@ -23,9 +23,9 @@ class MotionNode(Node):
         self.motion_pub = self.create_publisher(MotionCommand, 'motion_command', 10)
 
         # 1차선 물체 크기별 구간 임계값 (튜닝)
-        self.far_height  = 300  # m 단위, 이보다 멀면 1. 정지
-        self.accurate_height = 450   # 2. 직진
-        self.ambiguous_height = 480  # 3. 정지
+        # self.far_height  = 300  # m 단위, 이보다 멀면 1. 정지
+        # self.accurate_height = 450   # 2. 직진
+        # self.ambiguous_height = 480  # 3. 정지
 
         # traffic light
         self.traffic_area_threshold = 28000
@@ -43,6 +43,7 @@ class MotionNode(Node):
         self.target_lane = 2
         self.is_changing_lane = False
         self.wait_for_red_clear = False
+        self.once = True
 
         self.backward_motion = False
         self.forward_motion = False
@@ -63,13 +64,13 @@ class MotionNode(Node):
         self.no_obstacle_threshold = 3
 
         # lane 1 설정
-        self.lane1_angle_weight = 0.9
+        self.lane1_angle_weight = 0.75
         self.lane1_position_weight = 0.05
         self.lane1_normal_speed = 200
         self.lane1_lane_change_speed = 200
 
         # lane 2 설정
-        self.lane2_angle_weight = 0.8
+        self.lane2_angle_weight = 0.7
         self.lane2_position_weight = 0.05
         self.lane2_normal_speed = 200
         self.lane2_lane_change_speed = 200
@@ -171,7 +172,7 @@ class MotionNode(Node):
         steering_value = max(-10, min(mapped + adjust, 10))
 
 
-        # ================= 목표르 2차선에서  1차선 변경 ================
+        # ================= 목표를 2차선에서  1차선 변경 ================
         if self.current_lane == 2 and not self.lidar_lane_change_executed:
             if self.latest_lidar_avg is not None and self.latest_lidar_avg < 1.0:
                 self.lidar_lane_change_counter += 1
@@ -179,7 +180,9 @@ class MotionNode(Node):
                 self.lidar_lane_change_counter = 0
 
             if self.lidar_lane_change_counter >= self.lidar_lane_change_threshold:
-                self.target_lane = 1
+                if self.once:
+                    self.target_lane = 1
+                    self.once = False
                 self.is_changing_lane = True
                 self.lidar_lane_change_executed = True    # **한 번 실행 처리**
                 # self.get_logger().info(
@@ -190,37 +193,23 @@ class MotionNode(Node):
                 return
         # ==========================================================
 
-        # ================= 목표르 1차선에서  2차선 변경 ================
-        if self.current_lane == 1:
-            # 장애물 감지 카운트 로직
+        # ================= 목표를 1차선에서  2차선 변경 ================
+        if self.current_lane == 1 :
             if self.latest_lidar_avg is not None and self.latest_lidar_avg < 1.0:
-                self.lidar_obstacle_counter += 1
-                if self.lidar_obstacle_counter >= self.lidar_obstacle_threshold :
-                    self.obstacle_flag = True
-                    self.get_logger().info(
-                        f"🚧🚧🚧🚧🚧🚧🚧🚧🚧LiDAR 장애물 감지 연속 {self.lidar_obstacle_counter}회 → obstacle_flag=True")
+                self.lidar_lane_change_counter += 1
             else:
-                # 장애물 없으면 카운터 리셋
-                self.lidar_obstacle_counter = 0
-            self.get_logger().info(f"👉 obstacle_flag {self.obstacle_flag} 👉 forward_motion {self.forward_motion}")
+                self.lidar_lane_change_counter = 0
 
-            # 기록된 장애물 후, forward_motion 중에 장애물 사라졌으면 차선 변경
-            if self.obstacle_flag and self.forward_motion and self.latest_lidar_avg is not None and self.latest_lidar_avg > 1.0:
-                self.no_obstacle_counter += 1
-                if self.no_obstacle_counter >= self.no_obstacle_threshold:
-                    self.target_lane = 2
-                    self.is_changing_lane = True
-                    self.obstacle_flag = False
-                    self.no_obstacle_counter = 0
-                    self.get_logger().info(
-                        f"🔄 LiDAR 장애물 없음 연속 {self.no_obstacle_threshold}회 → 목표 차선 2로 변경")
-            else:
-                if not (self.obstacle_flag and self.forward_motion):
-                    self.no_obstacle_counter = 0
-        else: 
-            self.lidar_obstacle_counter = 0
+            if self.lidar_lane_change_counter >= self.lidar_lane_change_threshold:
+                self.target_lane = 2
+                self.is_changing_lane = True
+                self.get_logger().info(
+                    f"🚧 LiDAR 장애물 {self.lidar_lane_change_threshold}회 연속 감지 "
+                    f"🔄 🔄 🔄 🔄 🔄 🔄 🔄 (avg={self.latest_lidar_avg:.2f}m) → 1차선 변경"
+                )
+                self.lidar_lane_change_counter = 0
+                return
         # ==========================================================
-    
         if self.target_lane != self.current_lane :
             self.is_changing_lane = True
              
@@ -233,7 +222,7 @@ class MotionNode(Node):
             cmd.right_speed = lane_change_speed
 
 
-            # Lane chnage 상태 해제
+            # Lane change 상태 해제
             if self.current_lane == self.target_lane and abs(vehicle_position_x) <= 200:
                 self.is_changing_lane = False
                 self.obstacle_flag = False
@@ -261,44 +250,7 @@ class MotionNode(Node):
             #         self.get_logger().info("🟢 Red light cleared: resuming")
         # ================================================================================================  
 
-        # ==================================== 1차선 주행 로직 ====================================
-        elif self.current_lane == 1 and self.obstacle_detected:
-            
-            # 1) 너무 멀면 정지
-            if self.obstacle_height < self.far_height:
-                cmd.steering = int(steering_value)
-                cmd.left_speed  = 40
-                cmd.right_speed = 40
-                # self.get_logger().info(f"🟡 물체 너무 작음 (height= {self.obstacle_height}) → 정지")
-
-            # 2) 적당하면 직진 (가까울수록 느리게, 멀수록 빠르게)
-            elif self.obstacle_height < self.accurate_height:
-                self.forward_motion = True
-                # 수정 필요
-                speed = 140
-                cmd.steering = int(steering_value)
-                cmd.left_speed  = speed
-                cmd.right_speed = speed
-                # self.get_logger().info(f"🟢 적당한 물체 (height= {self.obstacle_height}) → 직진 속도 {speed}")
-
-            # 3) 애매하면 정지
-            elif self.obstacle_height < self.ambiguous_height:
-                cmd.left_speed  = 0
-                cmd.right_speed = 0
-                # self.get_logger().info(f"🟡 애매한 크기 (height={self.obstacle_height}) → 정지")
-
-            # 4) 너무 가까우면 후진
-            else:
-                self.backward_motion = True
-                self.forward_motion = False
-                self.obstacle_flag = False
-
-                cmd.steering = -int(steering_value)
-                cmd.left_speed  = -150
-                cmd.right_speed = -150
-                # self.get_logger().info(f"🔴 물체 너무 큼 (height={self.obstacle_height})")
-        # ================================================================================================  
-
+    
         else:     
             cmd.left_speed = normal_speed
             cmd.right_speed = normal_speed
