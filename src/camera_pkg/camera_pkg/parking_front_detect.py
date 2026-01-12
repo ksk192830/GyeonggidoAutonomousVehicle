@@ -16,6 +16,8 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 import cv2
 import numpy as np
 
+from interfaces_pkg.msg import ParkingLot
+
 
 class ParkingFrontDetect(Node):
     def __init__(self):
@@ -97,6 +99,9 @@ class ParkingFrontDetect(Node):
         self.get_logger().info(
             f"parking_front_detect initialized. Sub: {image_topic}, {detection_topic} -> Pub: {viz_topic}"
         )
+        
+        # 명균 파트
+        self.info_pub = self.create_publisher(ParkingLot, "/parking/lot_info", 10)
 
     def _get_perspective_matrix(self, w: int, h: int) -> np.ndarray:
         src = self.get_parameter("persp_src").value
@@ -410,6 +415,15 @@ class ParkingFrontDetect(Node):
         space_bev = cv2.bitwise_and(space_bev, union_bev)
         lot_bev = union_bev
 
+        # 명균 파트
+        detected, entry_x_norm, slope = self._fit_entry_line_from_lot(lot_bev, w, h, min_y_ratio=0.75)
+
+        msg = ParkingLot()
+        msg.found = bool(detected)
+        msg.x = float(entry_x_norm)
+        msg.yaw = float(slope)
+        self.info_pub.publish(msg)
+
         # --- build overlay layer (segmentation visualization) ---
         overlay = np.zeros((h, w, 3), np.uint8)
         overlay[lot_bev > 0] = (255, 255, 255)
@@ -438,6 +452,55 @@ class ParkingFrontDetect(Node):
         out_msg = self.bridge.cv2_to_imgmsg(bev, encoding="bgr8")
         out_msg.header = img_msg.header
         self.viz_pub.publish(out_msg)
+
+    def _fit_entry_line_from_lot(self, lot_bev: np.ndarray, w: int, h: int, min_y_ratio: float = 0.75):
+            b = (lot_bev > 0).astype(np.uint8) * 255
+            if b.sum() == 0:
+                return False, 0.0, 0.0
+
+             # 외곽선
+            contours, _ = cv2.findContours(b, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            if not contours:
+                return False, 0.0, 0.0
+
+            cnt = max(contours, key=cv2.contourArea)  # 가장 큰 lot 사용
+            pts = cnt.reshape(-1, 2)  # (N,2) [x,y]
+
+            # 아래쪽 포인트만 사용 (입구 근처)
+            min_y = int(h * np.clip(min_y_ratio, 0.0, 1.0))
+            pts_low = pts[pts[:, 1] >= min_y]
+            if pts_low.shape[0] < 20:
+                # 아래쪽 점이 너무 적으면 전체로라도 fit
+                pts_low = pts
+                if pts_low.shape[0] < 20:
+                    return False, 0.0, 0.0
+
+            pts_low = pts_low.astype(np.float32).reshape(-1, 1, 2)
+
+            # 직선 피팅: vx, vy, x0, y0
+            vx, vy, x0, y0 = cv2.fitLine(pts_low, cv2.DIST_L2, 0, 0.01, 0.01).flatten()
+
+            # yaw dy/dx
+            if abs(vx) < 1e-6:
+                yaw = 1e6  # 거의 수직
+            else:
+                yaw = float(vy / vx)
+
+            # y = h-1 에서의 교점 x
+            y_target = float(h - 1)
+
+            # x = x0 + (y_target - y0) * (vx / vy)
+            if abs(vy) < 1e-6:
+                # 거의 수평이면 교점 계산이 불안정 -> x0 사용
+                x_int = float(x0)
+            else:
+                x_int = float(x0 + (y_target - y0) * (vx / vy))
+
+            # normalize + clamp
+            x_norm = float(np.clip(x_int / float(w), 0.0, 1.0))
+
+            return True, x_norm, yaw
+
 
 
 def main(args=None):

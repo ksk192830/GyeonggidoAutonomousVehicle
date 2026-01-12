@@ -27,6 +27,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PathPlanningResult.msg"
   "msg/ParkingState.msg"
   "msg/ParkingSpace.msg"
+  "msg/ParkingLot.msg"
+  "msg/OutLine.msg"
+  "msg/EndLine.msg"
   DEPENDENCIES std_msgs sensor_msgs geometry_msgs
 )
 
