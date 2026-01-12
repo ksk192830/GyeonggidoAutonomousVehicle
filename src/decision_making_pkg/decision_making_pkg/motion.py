@@ -16,8 +16,8 @@ class MotionNode(Node):
         self.motion_pub = self.create_publisher(MotionCommand, 'motion_command', 10)
 
         # 신호등 감지 설정
-        self.lane1_area_threshold =  18000
-        self.lane2_area_threshold =  15000  # lane2에서 1
+        self.lane1_area_threshold =  9999999999#18000
+        self.lane2_area_threshold =  9999999#15000  # lane2에서 1
         self.required_count = 3
 
         # 상태 변수
@@ -31,13 +31,13 @@ class MotionNode(Node):
         self.clear_counter = 0
 
         # lane 1 설정
-        self.lane1_angle_weight = 1.0
+        self.lane1_angle_weight = 0.65 # 원래 0.75
         self.lane1_position_weight = 0.05
         self.lane1_normal_speed =255
         self.lane1_lane_change_speed = 255
 
         # lane 2 설정
-        self.lane2_angle_weight = 0.8
+        self.lane2_angle_weight = 0.6 # 원래 0.7
         self.lane2_position_weight = 0.05
         self.lane2_normal_speed = 255
         self.lane2_lane_change_speed = 255
@@ -142,7 +142,7 @@ class MotionNode(Node):
             steering_value = max(-10, min(mapped + adjust, 10))
             cmd.left_speed = normal_speed
             cmd.right_speed = normal_speed
-            self.get_logger().info(f"mapped: {mapped:.1f}, adjust: {adjust:.1f}, 현재 steer: {steering_value:.1f}")
+            self.get_logger().info(f"mapped: {mapped:.1f}, adjust: {adjust:.1f}, 현재 steer: {steering_value:.1f}\n\n")
 
 
         cmd.steering = int(steering_value)
