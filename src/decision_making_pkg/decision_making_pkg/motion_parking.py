@@ -15,14 +15,14 @@ class ParkingNode(Node):
         # Parameters
         self.margin = 4.0
 
-        self.parking_line_position_weight = 0
-        self.parking_line_angle_weight = 0
+        self.parking_line_position_weight = 1
+        self.parking_line_angle_weight = 1
 
-        self.parking_space_position_weight = 0
-        self.parking_space_angle_weight = 0
+        self.parking_space_position_weight = 1
+        self.parking_space_angle_weight = 1
 
-        self.out_line_position_weight = 0
-        self.out_line_angle_weight = 0
+        self.out_line_position_weight = 1
+        self.out_line_angle_weight = 1
         
         self.obstacle_in_right = False          # 최종 결과 (update_searching에서 쓰는 값)
         self.obstacle_detect = 0           # 연속으로 조건 만족한 횟수
@@ -125,13 +125,18 @@ class ParkingNode(Node):
     def update_searching(self):
         """1) 공간 찾기 전: 직진"""
         if self.parking_line_found:
-            steer_position = (self.parking_line_x- 0.7) * self.parking_line_position_weight
-            steer_angle = self.parking_line_yaw * self.parking_line_angle_weight
+            steer_position = (self.parking_line_x- 0.6) * self.parking_line_position_weight
+            if self.parking_line_yaw < 0:
+                yaw = 10 / 0.57 * (self.parking_line_yaw + 1.57)
+            else: 
+                yaw = 10 / 0.57 * (self.parking_line_yaw - 1.57)
+
+            steer_angle = yaw * self.parking_line_angle_weight
             
             mapped_steering = steer_position + steer_angle
             mapped_speed = 100
             
-            self.get_logger().info(f"position: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
+            self.get_logger().info(f"\nposition: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
             self.publish_cmd(steering=int(mapped_steering), speed=int(mapped_speed))
         if self.obstacle_in_right:
             self.get_logger().info("Parking space found → ALIGN_TO_SPACE")
