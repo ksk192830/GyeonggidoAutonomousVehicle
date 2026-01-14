@@ -35,10 +35,10 @@ class ParkingRearDetect(Node):
         )
         self.declare_parameter(
             "persp_dst",
-            [0.12, 0.56,
-    		 0.88, 0.56, 
-    		 0.86, 0.3, 
-    		 0.14, 0.3 ]
+            [0.12, 0.68,
+    		 0.88, 0.68, 
+    		 0.86, 0.5, 
+    		 0.14, 0.5 ]
         )
 
         self.declare_parameter("morph_kernel", 7)
