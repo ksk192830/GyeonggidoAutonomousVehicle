@@ -10,36 +10,37 @@ from rclpy.qos import (
 
 from sensor_msgs.msg import Image
 from interfaces_pkg.msg import DetectionArray
+from interfaces_pkg.msg import ParkingLot
+from interfaces_pkg.msg import OutLine
+
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 import cv2
 import numpy as np
 
-from interfaces_pkg.msg import ParkingLot
-
 
 class ParkingFrontDetect(Node):
     def __init__(self):
         super().__init__("parking_front_detect")
 
+        # topics
         self.declare_parameter("image_topic", "/cam0/image_raw")
         self.declare_parameter("detection_topic", "/cam0/detections")
         self.declare_parameter("viz_topic", "/front_viz")
 
-        self.declare_parameter(
-            "persp_src",
-            [0.25, 1.0, 0.75, 1.0, 0.62, 0.6, 0.38, 0.6],
-        )
-        self.declare_parameter(
-            "persp_dst",
-            [0.40, 1.0, 0.60, 1.0, 0.6, 0.6, 0.4, 0.6],
-        )
+        # perspective (normalized coords)
+        self.declare_parameter("persp_src", [0.25, 1.0, 0.75, 1.0, 0.62, 0.6, 0.38, 0.6])
+        self.declare_parameter("persp_dst", [0.40, 1.0, 0.60, 1.0, 0.60, 0.6, 0.40, 0.6])
 
-        self.declare_parameter("morph_kernel", 7)
+        # sync slop
         self.declare_parameter("slop", 0.3)
+
+        # mask postprocess
+        self.declare_parameter("morph_kernel", 7)
         self.declare_parameter("fill_holes", True)
 
+        # simplify options (keep your existing pipeline)
         self.declare_parameter("simplify_enable", True)
         self.declare_parameter("simplify_min_area_ratio", 0.002)
         self.declare_parameter("simplify_eps_ratio_space", 0.02)
@@ -53,6 +54,7 @@ class ParkingFrontDetect(Node):
 
         self.declare_parameter("join_enable", True)
         self.declare_parameter("join_kernel", 13)
+
         self.declare_parameter("union_simplify_enable", True)
         self.declare_parameter("union_eps_ratio", 0.02)
         self.declare_parameter("union_max_vertices", 8)
@@ -61,16 +63,23 @@ class ParkingFrontDetect(Node):
         self.declare_parameter("space_force_convex", True)
         self.declare_parameter("convex_max_area_growth", 5)
 
-        # visualize BEV cut boundary (valid area)
+        # BEV cut boundary
         self.declare_parameter("draw_bev_cut_boundary", True)
         self.declare_parameter("bev_cut_boundary_thickness", 2)
         self.declare_parameter("bev_cut_boundary_color_bgr", [0, 255, 255])
         self.declare_parameter("bev_cut_boundary_min_y_ratio", 0.5)
 
-        # === ADD: background BEV image overlay ===
-        # 0.0 = no background, 1.0 = only background
+        # background BEV overlay
         self.declare_parameter("bg_enable", True)
         self.declare_parameter("bg_opacity", 0.55)
+
+        # entry line (from parking_lot) params
+        self.declare_parameter("entry_min_y_ratio", 0.75)   # use bottom region
+        self.declare_parameter("entry_angle_deg", 25.0)     # keep near-horizontal
+
+        # out_line params
+        self.declare_parameter("outline_min_y_ratio", 0.40) # out_line can be higher than entry
+        self.declare_parameter("outline_angle_deg", 25.0)
 
         image_topic = self.get_parameter("image_topic").value
         detection_topic = self.get_parameter("detection_topic").value
@@ -89,20 +98,20 @@ class ParkingFrontDetect(Node):
         img_sub = Subscriber(self, Image, image_topic, qos_profile=qos)
         det_sub = Subscriber(self, DetectionArray, detection_topic, qos_profile=qos)
 
-        self.ts = ApproximateTimeSynchronizer(
-            [img_sub, det_sub], queue_size=10, slop=slop
-        )
+        self.ts = ApproximateTimeSynchronizer([img_sub, det_sub], queue_size=10, slop=slop)
         self.ts.registerCallback(self.sync_callback)
 
         self.viz_pub = self.create_publisher(Image, viz_topic, qos)
 
+        # publish outputs
+        self.parking_pub = self.create_publisher(ParkingLot, "/front_parking_line", 10)
+        self.outline_pub = self.create_publisher(OutLine, "/front_out_line", 10)
+
         self.get_logger().info(
             f"parking_front_detect initialized. Sub: {image_topic}, {detection_topic} -> Pub: {viz_topic}"
         )
-        
-        # 명균 파트
-        self.info_pub = self.create_publisher(ParkingLot, "/parking/lot_info", 10)
 
+    # ----------------- geometry / masks -----------------
     def _get_perspective_matrix(self, w: int, h: int) -> np.ndarray:
         src = self.get_parameter("persp_src").value
         dst = self.get_parameter("persp_dst").value
@@ -161,15 +170,12 @@ class ParkingFrontDetect(Node):
         num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(b, connectivity=8)
         if num_labels <= 1:
             return [(b * 255).astype(np.uint8)] if b.sum() > 0 else []
-
         areas = stats[1:, cv2.CC_STAT_AREA]
         valid = np.where(areas >= max(1, min_area_px))[0]
         if valid.size == 0:
             return []
-
         order = valid[np.argsort(areas[valid])[::-1]]
         order = order[: min(n, order.size)]
-
         comps = []
         for idx in order:
             label = idx + 1
@@ -299,7 +305,6 @@ class ParkingFrontDetect(Node):
 
         cv2.rectangle(bev_bgr, (0, 0), (w - 1, h - 1), color, thickness)
 
-    # === ADD: make BEV background from image_raw and alpha blend ===
     def _make_bev_background(self, frame_bgr: np.ndarray, M: np.ndarray, w: int, h: int) -> np.ndarray:
         bg = cv2.warpPerspective(
             frame_bgr,
@@ -320,6 +325,88 @@ class ParkingFrontDetect(Node):
             return base_bgr
         return cv2.addWeighted(base_bgr, a, overlay_bgr, 1.0 - a, 0.0)
 
+    # ----------------- line fitting helpers -----------------
+    @staticmethod
+    def _fit_line_hough_center(binary: np.ndarray, w: int, h: int, min_y_ratio: float, angle_deg: float):
+        """
+        binary: 0/255 mask
+        return: found, (cx,cy) pixel, yaw(dy/dx), (x1,y1,x2,y2) endpoints
+        """
+        b = (binary > 0).astype(np.uint8) * 255
+        if b.sum() == 0:
+            return False, 0.0, 0.0, 0.0, (0, 0, 0, 0)
+
+        min_y = int(h * np.clip(min_y_ratio, 0.0, 1.0))
+        roi = np.zeros_like(b)
+        roi[min_y:h, :] = 255
+        b_roi = cv2.bitwise_and(b, roi)
+
+        edges = cv2.Canny(b_roi, 30, 90)
+
+        lines = cv2.HoughLinesP(
+            edges,
+            rho=1,
+            theta=np.pi / 180.0,
+            threshold=25,
+            minLineLength=int(w * 0.12),
+            maxLineGap=60,
+        )
+        if lines is None:
+            return False, 0.0, 0.0, 0.0, (0, 0, 0, 0)
+
+        best = None
+        best_len = 0.0
+        ang_thr = np.deg2rad(angle_deg)
+
+        for l in lines:
+            x1, y1, x2, y2 = l[0]
+            dx = float(x2 - x1)
+            dy = float(y2 - y1)
+            length = float(np.hypot(dx, dy))
+            if length < 1.0:
+                continue
+
+            theta = abs(np.arctan2(dy, dx))  # 0=horizontal
+            if theta > ang_thr:
+                continue
+
+            y_mid = 0.5 * (y1 + y2)
+            if y_mid < min_y:
+                continue
+
+            if length > best_len:
+                best_len = length
+                best = (x1, y1, x2, y2)
+
+        if best is None:
+            return False, 0.0, 0.0, 0.0, (0, 0, 0, 0)
+
+        x1, y1, x2, y2 = best
+        dx = float(x2 - x1)
+        dy = float(y2 - y1)
+        yaw = dy / (dx + 1e-6)
+
+        cx = 0.5 * (x1 + x2)
+        cy = 0.5 * (y1 + y2)
+
+        return True, float(cx), float(cy), float(yaw), (int(x1), int(y1), int(x2), int(y2))
+
+    @staticmethod
+    def _x_at_bottom_from_line(cx: float, cy: float, yaw: float, w: int, h: int):
+        """
+        using point (cx,cy) and slope yaw=dy/dx, get x at y=h-1
+        """
+        y_target = float(h - 1)
+        # dy/dx = yaw => dx/dy = 1/yaw
+        if abs(yaw) < 1e-6:
+            # almost horizontal => x doesn't change much; just use cx
+            x_pix = cx
+        else:
+            x_pix = cx + (y_target - cy) / yaw
+        x_pix = float(np.clip(x_pix, 0.0, float(w - 1)))
+        return x_pix
+
+    # ----------------- main callback -----------------
     def sync_callback(self, img_msg: Image, det_msg: DetectionArray):
         try:
             frame = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
@@ -338,8 +425,9 @@ class ParkingFrontDetect(Node):
 
         lot_mask = np.zeros((h, w), np.uint8)
         space_mask = np.zeros((h, w), np.uint8)
-        out_mask = np.zeros((h, w), np.uint8)
+        outline_mask = np.zeros((h, w), np.uint8)
 
+        # gather masks from detections
         for det in det_msg.detections:
             cls = getattr(det, "class_name", "")
             if not hasattr(det, "mask") or det.mask is None:
@@ -349,25 +437,29 @@ class ParkingFrontDetect(Node):
             m = self._poly_to_mask(det.mask.data, h, w)
             if m is None or m.size == 0:
                 continue
+
             if cls == "parking_lot":
                 lot_mask = cv2.bitwise_or(lot_mask, m)
             elif cls == "parking_space":
                 space_mask = cv2.bitwise_or(space_mask, m)
             elif cls == "out_line":
-                out_mask = cv2.bitwise_or(out_mask, m)
+                outline_mask = cv2.bitwise_or(outline_mask, m)
 
+        # warp to BEV
         lot_bev = cv2.warpPerspective(lot_mask, M, (w, h), flags=cv2.INTER_NEAREST)
         space_bev = cv2.warpPerspective(space_mask, M, (w, h), flags=cv2.INTER_NEAREST)
-        out_bev = cv2.warpPerspective(out_mask, M, (w, h), flags=cv2.INTER_NEAREST)
+        outline_bev = cv2.warpPerspective(outline_mask, M, (w, h), flags=cv2.INTER_NEAREST)
 
+        # postprocess
         lot_bev = self._postprocess_mask(lot_bev)
         space_bev = self._postprocess_mask(space_bev)
-        out_bev = self._postprocess_mask(out_bev)
+        outline_bev = self._postprocess_mask(outline_bev)
 
         lot_polys = []
         space_polys = []
         union_polys = []
 
+        # simplify (same as your pipeline)
         if bool(self.get_parameter("simplify_enable").value):
             eps_space = float(self.get_parameter("simplify_eps_ratio_space").value)
             eps_lot = float(self.get_parameter("simplify_eps_ratio_lot").value)
@@ -415,22 +507,62 @@ class ParkingFrontDetect(Node):
         space_bev = cv2.bitwise_and(space_bev, union_bev)
         lot_bev = union_bev
 
-        # 명균 파트
-        detected, entry_x_norm, slope = self._fit_entry_line_from_lot(lot_bev, w, h, min_y_ratio=0.75)
+        # ----------------- 1) entry line from parking_lot -----------------
+        entry_min_y = float(self.get_parameter("entry_min_y_ratio").value)
+        entry_ang = float(self.get_parameter("entry_angle_deg").value)
 
-        msg = ParkingLot()
-        msg.found = bool(detected)
-        msg.x = float(entry_x_norm)
-        msg.yaw = float(slope)
-        self.info_pub.publish(msg)
+        found_entry, cx_e, cy_e, yaw_e, seg_e = self._fit_line_hough_center(
+            lot_bev, w, h, min_y_ratio=entry_min_y, angle_deg=entry_ang
+        )
+        x_pix_entry = self._x_at_bottom_from_line(cx_e, cy_e, yaw_e, w, h)
+        x_norm_entry = float(np.clip(x_pix_entry / float(w), 0.0, 1.0))
 
-        # --- build overlay layer (segmentation visualization) ---
+        msg_parking = ParkingLot()
+        msg_parking.found = bool(found_entry)
+        msg_parking.x = float(x_norm_entry)
+        msg_parking.yaw = float(yaw_e)
+        self.parking_pub.publish(msg_parking)
+
+        # ----------------- 2) out_line center + yaw -----------------
+        out_min_y = float(self.get_parameter("outline_min_y_ratio").value)
+        out_ang = float(self.get_parameter("outline_angle_deg").value)
+
+        found_out, cx_o, cy_o, yaw_o, seg_o = self._fit_line_hough_center(
+            outline_bev, w, h, min_y_ratio=out_min_y, angle_deg=out_ang
+        )
+
+        # normalize center coordinates (0~1)
+        x_norm_out = float(np.clip(cx_o / float(w), 0.0, 1.0))
+        y_norm_out = float(np.clip(cy_o / float(h), 0.0, 1.0))
+
+        msg_out = OutLine()
+        msg_out.found = bool(found_out)
+        msg_out.x = float(x_norm_out)
+        msg_out.y = float(y_norm_out)
+        msg_out.yaw = float(yaw_o)
+        self.outline_pub.publish(msg_out)
+
+        # ----------------- visualization -----------------
         overlay = np.zeros((h, w, 3), np.uint8)
-        overlay[lot_bev > 0] = (255, 255, 255)
-        overlay[space_bev > 0] = (255, 0, 0)
-        overlay[out_bev > 0] = (0, 0, 255)
+        overlay[lot_bev > 0] = (255, 255, 255)    # lot = white
+        overlay[space_bev > 0] = (255, 0, 0)      # space = blue-ish (BGR)
+        overlay[outline_bev > 0] = (0, 0, 255)    # out_line mask = red
 
-        # boundary + edges on overlay
+        PURPLE = (255, 0, 255)  # BGR
+
+        # draw entry line (PURPLE)
+        if found_entry:
+            x1, y1, x2, y2 = seg_e
+            cv2.line(overlay, (x1, y1), (x2, y2), PURPLE, 4)
+            cv2.circle(overlay, (int(x_pix_entry), h - 1), 7, PURPLE, -1)
+
+        # draw out_line (PURPLE + center point)
+        if found_out:
+            x1, y1, x2, y2 = seg_o
+            cv2.line(overlay, (x1, y1), (x2, y2), PURPLE, 4)
+            cv2.circle(overlay, (int(cx_o), int(cy_o)), 7, PURPLE, -1)
+
+        # boundary + edges
         self._draw_bev_cut_boundary(overlay, M, w, h)
 
         if bool(self.get_parameter("draw_simplified_edges").value):
@@ -438,13 +570,12 @@ class ParkingFrontDetect(Node):
             self._draw_polys(overlay, space_polys, (0, 255, 0), thickness=2)
             self._draw_polys(overlay, union_polys, (255, 0, 255), thickness=2)
 
-        # --- background BEV from image_raw ---
+        # background blend
         bg_enable = bool(self.get_parameter("bg_enable").value)
         bg_opacity = float(self.get_parameter("bg_opacity").value)
 
         if bg_enable and bg_opacity > 0.001:
             bev_bg = self._make_bev_background(frame, M, w, h)
-            # final = bg_opacity * bev_bg + (1-bg_opacity) * overlay
             bev = self._alpha_blend(bev_bg, overlay, bg_opacity)
         else:
             bev = overlay
@@ -452,55 +583,6 @@ class ParkingFrontDetect(Node):
         out_msg = self.bridge.cv2_to_imgmsg(bev, encoding="bgr8")
         out_msg.header = img_msg.header
         self.viz_pub.publish(out_msg)
-
-    def _fit_entry_line_from_lot(self, lot_bev: np.ndarray, w: int, h: int, min_y_ratio: float = 0.75):
-            b = (lot_bev > 0).astype(np.uint8) * 255
-            if b.sum() == 0:
-                return False, 0.0, 0.0
-
-             # 외곽선
-            contours, _ = cv2.findContours(b, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            if not contours:
-                return False, 0.0, 0.0
-
-            cnt = max(contours, key=cv2.contourArea)  # 가장 큰 lot 사용
-            pts = cnt.reshape(-1, 2)  # (N,2) [x,y]
-
-            # 아래쪽 포인트만 사용 (입구 근처)
-            min_y = int(h * np.clip(min_y_ratio, 0.0, 1.0))
-            pts_low = pts[pts[:, 1] >= min_y]
-            if pts_low.shape[0] < 20:
-                # 아래쪽 점이 너무 적으면 전체로라도 fit
-                pts_low = pts
-                if pts_low.shape[0] < 20:
-                    return False, 0.0, 0.0
-
-            pts_low = pts_low.astype(np.float32).reshape(-1, 1, 2)
-
-            # 직선 피팅: vx, vy, x0, y0
-            vx, vy, x0, y0 = cv2.fitLine(pts_low, cv2.DIST_L2, 0, 0.01, 0.01).flatten()
-
-            # yaw dy/dx
-            if abs(vx) < 1e-6:
-                yaw = 1e6  # 거의 수직
-            else:
-                yaw = float(vy / vx)
-
-            # y = h-1 에서의 교점 x
-            y_target = float(h - 1)
-
-            # x = x0 + (y_target - y0) * (vx / vy)
-            if abs(vy) < 1e-6:
-                # 거의 수평이면 교점 계산이 불안정 -> x0 사용
-                x_int = float(x0)
-            else:
-                x_int = float(x0 + (y_target - y0) * (vx / vy))
-
-            # normalize + clamp
-            x_norm = float(np.clip(x_int / float(w), 0.0, 1.0))
-
-            return True, x_norm, yaw
-
 
 
 def main(args=None):
