@@ -15,14 +15,14 @@ class ParkingNode(Node):
         # Parameters
         self.margin = 4.0
 
-        self.parking_line_position_weight = 1
-        self.parking_line_angle_weight = 1
+        self.parking_line_position_weight = 0
+        self.parking_line_angle_weight = 0
 
-        self.parking_space_position_weight = 1
-        self.parking_space_angle_weight = 1
+        self.parking_space_position_weight = 0
+        self.parking_space_angle_weight = 0
 
-        self.out_line_position_weight = 1
-        self.out_line_angle_weight = 20/pi
+        self.out_line_position_weight = 0
+        self.out_line_angle_weight = 20 / math.pi
         
         self.obstacle_in_right = False          # 최종 결과 (update_searching에서 쓰는 값)
         self.obstacle_detect = 0           # 연속으로 조건 만족한 횟수
@@ -31,14 +31,18 @@ class ParkingNode(Node):
         self.parking_space_found_num = 0
         self.parking_space_required_num = 5
 
+
         self.parking_line_found = False
         self.parking_space_found = False
         self.end_line_found = False
         self.out_line_found = False
 
+        self.end_line_stop_y = 420
+
         # Parking State
         self.state = "SEARCHING_SPACE"
 
+        self.enter_stopped_time = None
         
         # Subscribers
         self.create_subscription(LaserScan, "/scan_raw", self.lidar_callback, 10)
@@ -125,18 +129,13 @@ class ParkingNode(Node):
     def update_searching(self):
         """1) 공간 찾기 전: 직진"""
         if self.parking_line_found:
-            steer_position = (self.parking_line_x- 0.6) * self.parking_line_position_weight
-            if self.parking_line_yaw < 0:
-                yaw = 10 / 0.57 * (self.parking_line_yaw + 1.57)
-            else: 
-                yaw = 10 / 0.57 * (self.parking_line_yaw - 1.57)
-
-            steer_angle = yaw * self.parking_line_angle_weight
+            steer_position = (self.parking_line_x- 0.7) * self.parking_line_position_weight
+            steer_angle = self.parking_line_yaw * self.parking_line_angle_weight
             
             mapped_steering = steer_position + steer_angle
             mapped_speed = 100
             
-            self.get_logger().info(f"\nposition: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
+            self.get_logger().info(f"position: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
             self.publish_cmd(steering=int(mapped_steering), speed=int(mapped_speed))
         if self.obstacle_in_right:
             self.get_logger().info("Parking space found → ALIGN_TO_SPACE")
@@ -156,19 +155,43 @@ class ParkingNode(Node):
 
     def update_parking(self):
         """3) 후진하여 주차"""
-        
+        if not self.parking_space_found:
+            self.publish_cmd(steering=0, speed=80)
+        return
+
         steer_position = (self.parking_space_x - 0.5) * self.parking_space_position_weight
         steer_angle = self.parking_space_yaw * self.parking_space_angle_weight
 
         steer_position = -steer_position 
-        steer_angle = -steer_angle 
-        
+        yaw_target = math.pi / 2.0
+        yaw_error = self.parking_space_yaw - yaw_target
+
+        # 각도 wrap (-pi ~ pi)
+        yaw_error = math.atan2(math.sin(yaw_error), math.cos(yaw_error))
+
+        steer_angle = yaw_error * self.parking_space_angle_weight
+        steer_angle = -steer_angle  # 후진 기준 보정
+
+        # --- 3) Steering 합성 ---
         mapped_steering = steer_position + steer_angle
+        mapped_steering = max(min(mapped_steering, 10.0), -10.0)
+
         mapped_speed = 100
         
-        self.get_logger().info(f"position: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
+        self.get_logger().info(
+            f"[PARKING_IN]\n"
+            f"pos_err={steer_position:.2f}, yaw_err={yaw_error:.2f}\n"
+            f"steer={mapped_steering:.2f}"
+        )
         self.publish_cmd(steering=int(mapped_steering), speed=int(mapped_speed))
 
+        if self.end_line_found:
+            if self.end_line_y >= self.end_line_stop_y:
+                self.get_logger().info(
+                    f"End line reached (y={self.end_line_y:.2f}) → STOPPED"
+                )
+                self.state = "STOPPED"
+                return
 
     def update_stopped(self):
         """4) 최종 정지"""
@@ -209,7 +232,7 @@ class ParkingNode(Node):
         """6) out_line 찾아 종료"""
         if self.out_line_found:
             steer_position = (self.out_line_x - 0.5) * self.out_line_position_weight
-            steer_angle = self.parking_line_yaw * self.out_line_angle_weight
+            steer_angle = self.out_line_yaw * self.out_line_angle_weight
             
             mapped_steering = steer_position + steer_angle
             mapped_steering = max(min(mapped_steering, 10.0), -10.0)
