@@ -9,12 +9,13 @@ from rclpy.qos import (
 )
 
 from sensor_msgs.msg import Image
-from interfaces_pkg.msg import DetectionArray
+from interfaces_pkg.msg import DetectionArray, EndLine
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 import cv2
 import numpy as np
+import math
 
 
 class ParkingRearDetect(Node):
@@ -41,7 +42,7 @@ class ParkingRearDetect(Node):
         )
 
         self.declare_parameter("morph_kernel", 7)
-        self.declare_parameter("slop", 0.3)
+        self.declare_parameter("slop", 1.0)
         self.declare_parameter("fill_holes", True)
 
         self.declare_parameter("simplify_enable", True)
@@ -98,9 +99,10 @@ class ParkingRearDetect(Node):
         self.ts.registerCallback(self.sync_callback)
 
         self.viz_pub = self.create_publisher(Image, viz_topic, qos)
+        self.end_line_pub = self.create_publisher(EndLine, "/rear_end_line", 10)
 
         self.get_logger().info(
-            f"parking_rear_detect initialized. Sub: {image_topic}, {detection_topic} -> Pub: {viz_topic}"
+            f"parking_rear_detect initialized. Sub: {image_topic}, {detection_topic} -> Pub: {viz_topic}, /rear_end_line"
         )
 
     def _get_perspective_matrix(self, w: int, h: int) -> np.ndarray:
@@ -464,6 +466,61 @@ class ParkingRearDetect(Node):
                 self._draw_polys(overlay, space_polys, (0, 255, 0), thickness=2)
             if en_lot or en_space:
                 self._draw_polys(overlay, union_polys, (255, 0, 255), thickness=2)
+
+        # --- EndLine Calculation & Visualization (Simple & Robust) ---
+        end_msg = EndLine()
+        end_msg.found = False
+        
+        # end_bev is valid if en_end is True.
+        if en_end:
+            try:
+                cnts, _ = cv2.findContours(end_bev, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if cnts:
+                    c = max(cnts, key=cv2.contourArea)
+                    if cv2.contourArea(c) > 50:
+                        # 1. Get all points
+                        points = c[:, 0, :]
+                        
+                        # 2. Robust Direction: Fit line to ALL points
+                        # This gives the average slope of the entire blob
+                        line_params = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01)
+                        vx, vy, _, _ = line_params.flatten()
+                        
+                        # Normalize direction (pointing right)
+                        if vx < 0:
+                            vx, vy = -vx, -vy
+                        
+                        # 3. Anchor Point: The bottom-most point (Max Y)
+                        # Sort by Y descending, take the first one
+                        sorted_indices = np.argsort(points[:, 1])[::-1]
+                        bottom_point = points[sorted_indices[0]]
+                        bx, by = bottom_point
+                        
+                        # 4. Calculate Yaw
+                        yaw = math.atan2(vy, vx)
+                        
+                        # 5. Publish
+                        end_msg.found = True
+                        end_msg.x = float(bx)
+                        end_msg.y = float(by)
+                        end_msg.yaw = float(yaw)
+                        
+                        # 6. Visualization
+                        # Draw line passing through (bx, by) with slope (vy/vx)
+                        # y = tan(yaw) * (x - bx) + by
+                        tan_yaw = vy / (vx + 1e-6) # Avoid division by zero
+                        
+                        y_at_0 = tan_yaw * (0 - bx) + by
+                        y_at_w = tan_yaw * (w - bx) + by
+                        
+                        cv2.line(overlay, (0, int(y_at_0)), (w, int(y_at_w)), (0, 255, 0), 10)
+
+            except Exception as e:
+                self.get_logger().warn(f"EndLine calculation failed: {e}")
+        else:
+            pass
+
+        self.end_line_pub.publish(end_msg)
 
         bg_enable = bool(self.get_parameter("bg_enable").value)
         bg_opacity = float(self.get_parameter("bg_opacity").value)

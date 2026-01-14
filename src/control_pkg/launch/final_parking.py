@@ -22,7 +22,7 @@ def generate_launch_description():
                 # {'data_source': 'camera'},  # camera, video, image 선택
 
                 {'cam_num': 2},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_front'},
+                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_front_new'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
@@ -79,7 +79,7 @@ def generate_launch_description():
                 # {'rotate_mode': 1},
 
                 {'cam_num': 4},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_test'},
+                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear_new'},
                 {'pub_topic': '/cam1/image_raw'},
                 {'window_name': 'Raw 1'},
                 {'show_image': False},

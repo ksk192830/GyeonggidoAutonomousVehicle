@@ -1,0 +1,228 @@
+[33mcommit bbadd542b0f564510fb72570256d2a28400bfbd6[m[33m ([m[1;36mHEAD -> [m[1;32mparking[m[33m, [m[1;31morigin/parking[m[33m)[m
+Merge: 1ea02fc 60b3910
+Author: Min <kmc6042@g.skku.edu>
+Date:   Tue Jan 13 01:06:15 2026 +0900
+
+    Endline.msg
+
+[33mcommit 1ea02fc22f7e1e894d30c8f48585216aeb3be27d[m
+Author: Min <kmc6042@g.skku.edu>
+Date:   Tue Jan 13 00:59:48 2026 +0900
+
+    Endline.msg
+
+[33mcommit 60b39103d5c4766916ed9dec7bcc8c21ed027c6e[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Mon Jan 12 23:59:59 2026 +0900
+
+    오류 수정
+
+[33mcommit 8e386aef786479c72b2d392906c6f1a84a0797fb[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Mon Jan 12 23:54:09 2026 +0900
+
+    오류 수정
+
+[33mcommit 419fe0730afe2c82c77711c028fd41b36b491118[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Mon Jan 12 15:08:30 2026 +0900
+
+    주차 로직 변경
+
+[33mcommit 9f98d779fbc1d5e2cf3a8722c958c15df182aa91[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Mon Jan 12 12:50:05 2026 +0900
+
+    토픽 메시지 형식 정의
+
+[33mcommit 1355dff7e6d8d9434a25481fd3fe35aa7f7e256e[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Mon Jan 12 12:03:59 2026 +0900
+
+    파라미터 수정
+
+[33mcommit 4ce7dcb2ff6f8a2a8fa205f8cf057b26e75752ba[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Mon Jan 12 12:03:26 2026 +0900
+
+    파라미터 수정
+
+[33mcommit 543084b804b008a9cc558281ea8e9a302fb91642[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:28:04 2026 +0900
+
+    주차 노드 추가
+
+[33mcommit 1a5e57a034de5971c0ff75851c73a3631c1a9fe4[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:26:59 2026 +0900
+
+    전면 카메라 후처리 업데이트
+
+[33mcommit b63efe4156f8ab7a45f89913de001c0b7c6b2dbf[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:26:31 2026 +0900
+
+    후면 yolo모델 업데이트
+
+[33mcommit b7eb6022e973979efb3b120f48764fd2cdaf81a4[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:25:36 2026 +0900
+
+    후면 카메라 후처리 추가
+
+[33mcommit 020e85a497dcd282c1b7136ddea2c72187b37db7[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:22:24 2026 +0900
+
+    이미지는 구글드라이브에
+
+[33mcommit c59168aed0c147f2e310df3cae0cda009e1b51db[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:19:52 2026 +0900
+
+    Stop tracking img
+
+[33mcommit ff32a4dd96914bd3ddfbfac40fcb06ce2bb2a148[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:18:28 2026 +0900
+
+    Stop tracking img
+
+[33mcommit f58dbeff245c5d33d5a0741d3252fca662c88573[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 11 13:16:55 2026 +0900
+
+    Stop tracking img
+
+[33mcommit 589db1a8d012159826a8509542aa9819b5d2cf22[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sat Jan 10 17:13:08 2026 +0900
+
+    주차 후면 데이터 추가
+
+[33mcommit 4d7a0bbf498f7684eaf0b574050bb283068d8c19[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sat Jan 10 17:08:04 2026 +0900
+
+    주차 전면 데이터 추가
+
+[33mcommit 529f76f6b34e223d71c58ed24c8245ee8d452c2a[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sat Jan 10 16:47:41 2026 +0900
+
+    parking_front 후처리 개선
+
+[33mcommit db863a69fc35ca9c8d1fe1b68e484efaddf539bf[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sat Jan 10 16:46:57 2026 +0900
+
+    yolo 모델 업데이트
+
+[33mcommit 2f764e9804088d4523f112cd5f3cc7602968d807[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Wed Jan 7 21:56:21 2026 +0900
+
+    데이터 수집 기능 추가
+
+[33mcommit cba3490866f9d34928eda06a04dd3d5ec914847c[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Wed Jan 7 02:29:49 2026 +0900
+
+    주차 맵 시각화 노드 추가
+
+[33mcommit 7f055fb0b280653cc988fff9bd4bd85905e8629c[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Wed Jan 7 02:29:11 2026 +0900
+
+    주차 런치파일 노드 추가
+
+[33mcommit 6a5d57a68cb5e5d337eb746033dba1fd9e420f33[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Wed Jan 7 02:28:23 2026 +0900
+
+    주차 전면 해석 추가
+
+[33mcommit 7959376c64a1a454cda9e1c714a0582c2a20ca7a[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Wed Jan 7 02:27:15 2026 +0900
+
+    주차 맵 생성
+
+[33mcommit 6a06415f9f48daf658100c5ae6b8ad8979140fcf[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Wed Jan 7 02:26:12 2026 +0900
+
+    주차 시각화 수정
+
+[33mcommit a1ed824f1552b0624a6c8f625a15b27cff17c517[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Wed Jan 7 02:25:05 2026 +0900
+
+    yolo모델 추가
+
+[33mcommit 2ef004c56545cd13960961018aa4f384a74e4db6[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:52:37 2026 +0900
+
+    Initial
+
+[33mcommit 4a6583623a03b95280f53bfb8b0ea7c8949bfddf[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:50:07 2026 +0900
+
+    Initial
+
+[33mcommit 4ccf1bfe691b80ed3ff7a17bea30ebdb26e5a337[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:48:37 2026 +0900
+
+    Initial
+
+[33mcommit 6acfdfaa156deaac248c3df2077342eae2fcf443[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:47:09 2026 +0900
+
+    Initial
+
+[33mcommit 43d4b8e1e593f05051e3aa4a75736095bcef447e[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:45:26 2026 +0900
+
+    Initial
+
+[33mcommit 0213095bda7240755dc55073a53ee012cf68e836[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:43:30 2026 +0900
+
+    Initial
+
+[33mcommit 788c10ab7c30d2dc590fa41e186cff348419c530[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:40:50 2026 +0900
+
+    Initial
+
+[33mcommit d2100a51b46acd70db71c6979a44b6b18ab2c5e6[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:39:03 2026 +0900
+
+    Initial
+
+[33mcommit 42241d4695a4e4f4f8efad3907bd41b7c0bb77f4[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:37:12 2026 +0900
+
+    Initial
+
+[33mcommit 912afccabe473dd7d46ad728653cef67c345cfc8[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:36:28 2026 +0900
+
+    Initial
+
+[33mcommit 058a2aa02d47883aea3fd7fabeb9a412ccd0bf86[m
+Author: ksk192830 <ksk192830@g.skku.edu>
+Date:   Sun Jan 4 17:33:32 2026 +0900
+
+    Initial
