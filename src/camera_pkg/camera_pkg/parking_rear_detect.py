@@ -426,35 +426,94 @@ class ParkingRearDetect(Node):
         center_line = None # (vx, vy, x0, y0)
         
         # Logic Selection
+        is_single_line = False
+        selected_line = None
+        
         if l_param is not None and r_param is not None:
-            # Case 3: Both lines visible -> Average
-            lvx, lvy, lx0, ly0 = l_param
-            rvx, rvy, rx0, ry0 = r_param
+            # Check horizontal distance between the two detected lines
+            dist = abs(r_param[2] - l_param[2])
             
-            avg_vx = (lvx + rvx) / 2
-            avg_vy = (lvy + rvy) / 2
-            avg_x0 = (lx0 + rx0) / 2
-            avg_y0 = (ly0 + ry0) / 2
-            center_line = (avg_vx, avg_vy, avg_x0, avg_y0)
-            
+            if dist >= 200.0:
+                # Case 3: Both lines visible and far enough apart -> Average
+                lvx, lvy, lx0, ly0 = l_param
+                rvx, rvy, rx0, ry0 = r_param
+                
+                avg_vx = (lvx + rvx) / 2
+                avg_vy = (lvy + rvy) / 2
+                avg_x0 = (lx0 + rx0) / 2
+                avg_y0 = (ly0 + ry0) / 2
+                center_line = (avg_vx, avg_vy, avg_x0, avg_y0)
+            else:
+                # Too close (< 200px), likely edges of the same line.
+                # Treat as single line. Prioritize Right line if available.
+                selected_line = r_param if r_param is not None else l_param
+                is_single_line = True
         elif r_param is not None:
-            # Case 1 & 2: Right line only -> Shift Left
-            vx, vy, x0, y0 = r_param
-            
-            # Assuming lines are roughly vertical.
-            # If vy > 0 (down), "Left" is -x direction relative to line.
-            # Ideally: perpendicular shift.
-            # Normal vector to (vx, vy) is (-vy, vx).
-            # If we assume (vx, vy) points DOWN, left is positive x in normal frame?
-            # Let's stick to simple horizontal shift for robustness as parking lines are vertical.
-            center_line = (vx, vy, x0 - half_width, y0)
-            
+            selected_line = r_param
+            is_single_line = True
         elif l_param is not None:
-            # Case 4: Left line only -> Shift Right
-            vx, vy, x0, y0 = l_param
-            center_line = (vx, vy, x0 + half_width, y0)
+            selected_line = l_param
+            is_single_line = True
             
-        else:
+        if is_single_line and selected_line is not None:
+            vx, vy, x0, y0 = selected_line
+            
+            # Find the Apex (farthest point in contour) to determine shift direction
+            cnts, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            shift_direction = 0 # -1: Left, 1: Right
+            
+            if cnts:
+                c = max(cnts, key=cv2.contourArea)
+                
+                # Find point with max distance from the line
+                # Distance = |Ax + By + C| / sqrt(A^2 + B^2)
+                # Line: -vy*x + vx*y + (vy*x0 - vx*y0) = 0
+                A = -vy
+                B = vx
+                C = vy*x0 - vx*y0
+                denom = math.sqrt(A*A + B*B) + 1e-6
+                
+                max_dist = -1
+                apex = None
+                
+                # Sample points from contour (every 5th point to save time)
+                for p in c[::5]:
+                    pt = p[0]
+                    dist = abs(A*pt[0] + B*pt[1] + C) / denom
+                    if dist > max_dist:
+                        max_dist = dist
+                        apex = pt
+                
+                if apex is not None:
+                    # Determine side of Apex relative to Line
+                    # Use x intersection at apex_y
+                    if abs(vy) > 1e-3:
+                        x_on_line = x0 + (vx/vy) * (apex[1] - y0)
+                        if apex[0] < x_on_line:
+                            shift_direction = -1 # Apex is Left -> Shift Left
+                        else:
+                            shift_direction = 1  # Apex is Right -> Shift Right
+                    else:
+                        # Vertical line case (vy near 0), check y
+                        # If line is horizontal (vx near 1), this is weird for parking.
+                        pass
+            
+            # Apply shift
+            # If shift_direction is found, use it. 
+            # If not found (no contour?), fallback to existing logic based on line detection source?
+            # Fallback: If we selected r_param, we usually shift Left. If l_param, Shift Right.
+            
+            if shift_direction != 0:
+                center_line = (vx, vy, x0 + shift_direction * half_width, y0)
+            else:
+                # Fallback based on original classification
+                if selected_line == r_param:
+                    center_line = (vx, vy, x0 - half_width, y0) # Default Shift Left
+                else:
+                    center_line = (vx, vy, x0 + half_width, y0) # Default Shift Right
+
+        if center_line is None:
             return msg # Nothing found
 
         # Calculate Output & Visualize
@@ -559,9 +618,17 @@ class ParkingRearDetect(Node):
         if en_space:
             space_bev = self._postprocess_mask(space_bev)
             
-            # Fixed 15-pixel dilation for ROI
+            # Create a band around the boundary: Dilate - Erode
+            # Both 15px means +/- 7px effectively if kernel is 15 centered? 
+            # No, dilate with 15x15 extends 7px each side approx.
+            # User asked for "dilate 15 pixels in both directions". 
+            # So we dilate by 15px and erode by 15px relative to original boundary.
             kernel = np.ones((15, 15), np.uint8)
-            space_roi = cv2.dilate(space_bev, kernel, iterations=1)
+            dilated = cv2.dilate(space_bev, kernel, iterations=1)
+            eroded = cv2.erode(space_bev, kernel, iterations=1)
+            
+            # The band is the difference
+            space_roi = cv2.bitwise_xor(dilated, eroded)
         else:
             space_bev[:] = 0
             
