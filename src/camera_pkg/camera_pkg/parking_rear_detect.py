@@ -77,6 +77,7 @@ class ParkingRearDetect(Node):
         self.declare_parameter("enable_parking_lot", False)
         self.declare_parameter("enable_parking_space", True)
         self.declare_parameter("enable_end_line", True)
+        self.declare_parameter("end_max_area_ratio", 0.15)
         
         # Fixed parking space width in pixels for BEV
         self.declare_parameter("parking_width_px", 528.0)
@@ -775,11 +776,21 @@ class ParkingRearDetect(Node):
         
         # end_bev is valid if en_end is True.
         if en_end:
+            end_area_ratio = float(self.get_parameter("end_max_area_ratio").value)
+            end_area_limit = None
+            if end_area_ratio > 0.0:
+                end_area_limit = img_area * min(1.0, end_area_ratio)
             try:
                 cnts, _ = cv2.findContours(end_bev, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if cnts:
                     c = max(cnts, key=cv2.contourArea)
-                    if cv2.contourArea(c) > 50:
+                    area = cv2.contourArea(c)
+                    if area > 50:
+                        if end_area_limit is not None and area >= end_area_limit:
+                            self.get_logger().warn(
+                                f"EndLine contour area {area:.0f} exceeds limit {end_area_limit:.0f}, skipping."
+                            )
+                            raise ValueError("EndLine contour area too large")
                         # 1. Get all points
                         points = c[:, 0, :]
                         
