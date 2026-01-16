@@ -452,6 +452,15 @@ class ParkingRearDetect(Node):
         selected_line = None
         
         if l_param is not None and r_param is not None:
+            # Reject if the two lines are too non-parallel (e.g., endline + side line)
+            angle_l = math.atan2(l_param[1], l_param[0])
+            angle_r = math.atan2(r_param[1], r_param[0])
+            angle_diff = abs(angle_l - angle_r)
+            if angle_diff > math.pi:
+                angle_diff = 2 * math.pi - angle_diff
+            angle_diff_deg = math.degrees(angle_diff)
+            if angle_diff_deg >= 40.0:
+                return msg  # Do not generate center line for L-shaped pair
             # Check horizontal distance between the two detected lines
             dist = abs(r_param[2] - l_param[2])
             
@@ -480,10 +489,12 @@ class ParkingRearDetect(Node):
         if is_single_line and selected_line is not None:
             vx, vy, x0, y0 = selected_line
             
-            # Find the Apex (farthest point in contour) to determine shift direction
-            cnts, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            base_dir = -1 if selected_line == r_param else 1  # Default: right line -> shift left, left line -> shift right
+            shift_direction = base_dir
+            apex_dir = 0
             
-            shift_direction = 0 # -1: Left, 1: Right
+            # Find the Apex (farthest point in contour) to refine shift direction
+            cnts, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             if cnts:
                 c = max(cnts, key=cv2.contourArea)
@@ -513,18 +524,18 @@ class ParkingRearDetect(Node):
                     if abs(vy) > 1e-3:
                         x_on_line = x0 + (vx/vy) * (apex[1] - y0)
                         if apex[0] < x_on_line:
-                            shift_direction = -1 # Apex is Left -> Shift Left
+                            apex_dir = -1 # Apex is Left -> Shift Left
                         else:
-                            shift_direction = 1  # Apex is Right -> Shift Right
+                            apex_dir = 1  # Apex is Right -> Shift Right
                     else:
                         # Vertical line case (vy near 0), check y
                         # If line is horizontal (vx near 1), this is weird for parking.
                         pass
             
             # Apply shift
-            # If shift_direction is found, use it. 
-            # If not found (no contour?), fallback to existing logic based on line detection source?
-            # Fallback: If we selected r_param, we usually shift Left. If l_param, Shift Right.
+            # Trust apex only if it agrees with base classification; otherwise keep base_dir
+            if apex_dir != 0 and apex_dir == base_dir:
+                shift_direction = apex_dir
             
             if shift_direction != 0:
                 center_line = (vx, vy, x0 + shift_direction * half_width, y0)
