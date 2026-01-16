@@ -379,8 +379,8 @@ class ParkingRearDetect(Node):
         
         left_lines = []
         right_lines = []
-        
-        cx = w // 2
+        segments = []
+        slopes = []
         
         if lines is not None:
             for line in lines:
@@ -393,8 +393,30 @@ class ParkingRearDetect(Node):
                 # Calculate slope and midpoint
                 slope = (x2 - x1) / (y2 - y1 + 1e-6)
                 mid_x = (x1 + x2) / 2
+                mid_y = (y1 + y2) / 2
                 
-                # Classify based on position
+                segments.append((x1, y1, x2, y2, mid_x, mid_y, slope))
+                slopes.append(slope)
+        
+        # Use parking ROI centroid as split origin; fallback to image center
+        M = cv2.moments(roi_mask)
+        if M["m00"] > 1e-3:
+            cx = M["m10"] / M["m00"]
+            cy = M["m01"] / M["m00"]
+        else:
+            cx = w // 2
+            cy = h // 2
+        
+        avg_slope = float(np.mean(slopes)) if slopes else None
+        
+        for (x1, y1, x2, y2, mid_x, mid_y, slope) in segments:
+            if avg_slope is not None:
+                x_on_split = cx + avg_slope * (mid_y - cy)
+                if mid_x < x_on_split:
+                    left_lines.append((x1, y1, x2, y2))
+                else:
+                    right_lines.append((x1, y1, x2, y2))
+            else:
                 if mid_x < cx:
                     left_lines.append((x1, y1, x2, y2))
                 else:
@@ -402,9 +424,9 @@ class ParkingRearDetect(Node):
 
         # Visualize detected segments for debugging
         for l in left_lines:
-            cv2.line(overlay, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 2) # Green
+            cv2.line(overlay, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 8) # Green
         for r in right_lines:
-            cv2.line(overlay, (r[0], r[1]), (r[2], r[3]), (0, 255, 255), 2) # Yellow
+            cv2.line(overlay, (r[0], r[1]), (r[2], r[3]), (0, 255, 255), 8) # Yellow
                     
         # Helper to fit a single line from segments
         def fit_single_line(line_segments):
