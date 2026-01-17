@@ -436,6 +436,8 @@ class ParkingFrontDetect(Node):
         except Exception as e:
             self.get_logger().warn(f"Perspective transform invalid: {e}")
             return
+        frame_bev = self._make_bev_background(frame, M, w, h)
+        frame_bev_gray = cv2.cvtColor(frame_bev, cv2.COLOR_BGR2GRAY)
 
         lot_mask = np.zeros((h, w), np.uint8)
         space_mask = np.zeros((h, w), np.uint8)
@@ -532,6 +534,7 @@ class ParkingFrontDetect(Node):
         out_msg = OutLine()
         out_msg.found = False
         outline_draw = None
+        stripe_region = None
 
         try:
             cnts, _ = cv2.findContours(outline_bev, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -557,6 +560,48 @@ class ParkingFrontDetect(Node):
                         raise ValueError("OutLine contour area too large")
 
                     points = c[:, 0, :]
+
+                    region_mask = np.zeros_like(outline_bev)
+                    if points.shape[0] >= 3:
+                        peri = cv2.arcLength(c, True)
+                        poly = cv2.approxPolyDP(c, 0.02 * peri, True)
+                        if poly is not None and len(poly) >= 3:
+                            cv2.fillPoly(region_mask, [poly], 255)
+                    if region_mask.sum() == 0:
+                        region_mask = outline_bev.copy()
+
+                    white_mask = np.zeros_like(outline_bev)
+                    roi_vals = frame_bev_gray[region_mask > 0]
+                    if roi_vals.size > 0:
+                        roi_vals = roi_vals.reshape(-1, 1)
+                        thresh_val, _ = cv2.threshold(
+                            roi_vals, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+                        )
+                    else:
+                        thresh_val = 200.0
+
+                    thresh_val = float(np.clip(thresh_val, 50.0, 255.0))
+                    _, mask_raw = cv2.threshold(frame_bev_gray, thresh_val, 255, cv2.THRESH_BINARY)
+                    white_mask = cv2.bitwise_and(mask_raw, region_mask)
+
+                    band_kernel = np.ones((3, 3), np.uint8)
+                    white_mask = cv2.morphologyEx(white_mask, cv2.MORPH_OPEN, band_kernel)
+                    white_mask = cv2.dilate(white_mask, band_kernel, iterations=1)
+
+                    stripes = white_mask > 0
+
+                    stripe_points = None
+                    if np.any(stripes):
+                        white_cnts, _ = cv2.findContours(white_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        if white_cnts:
+                            stripe = max(white_cnts, key=cv2.contourArea)
+                            stripe_points = stripe[:, 0, :]
+                            stripe_region = np.zeros_like(outline_bev)
+                            cv2.drawContours(stripe_region, [stripe], -1, 255, thickness=cv2.FILLED)
+
+                    if stripe_points is not None and stripe_points.shape[0] >= 2:
+                        points = stripe_points
+
                     if points.shape[0] >= 2:
                         line_params = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01)
                         vx, vy, _, _ = line_params.flatten()
@@ -583,7 +628,10 @@ class ParkingFrontDetect(Node):
         overlay = np.zeros((h, w, 3), np.uint8)
         overlay[lot_bev > 0] = (255, 255, 255)
         overlay[space_bev > 0] = (255, 0, 0)
-        overlay[outline_bev > 0] = (0, 0, 255)
+        if stripe_region is not None:
+            overlay[stripe_region > 0] = (0, 0, 255)
+        else:
+            overlay[outline_bev > 0] = (0, 0, 255)
 
         if fit["found"]:
             bx_pix = int(fit["bx"])
@@ -617,8 +665,7 @@ class ParkingFrontDetect(Node):
         bg_opacity = float(self.get_parameter("bg_opacity").value)
 
         if bg_enable and bg_opacity > 0.001:
-            bev_bg = self._make_bev_background(frame, M, w, h)
-            bev = self._alpha_blend(bev_bg, overlay, bg_opacity)
+            bev = self._alpha_blend(frame_bev, overlay, bg_opacity)
         else:
             bev = overlay
 
