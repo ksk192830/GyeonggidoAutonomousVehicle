@@ -77,6 +77,7 @@ class ParkingRearDetect(Node):
         self.declare_parameter("enable_parking_lot", False)
         self.declare_parameter("enable_parking_space", True)
         self.declare_parameter("enable_end_line", True)
+        self.declare_parameter("end_max_area_ratio", 0.15)
         
         # Fixed parking space width in pixels for BEV
         self.declare_parameter("parking_width_px", 528.0)
@@ -379,8 +380,8 @@ class ParkingRearDetect(Node):
         
         left_lines = []
         right_lines = []
-        
-        cx = w // 2
+        segments = []
+        slopes = []
         
         if lines is not None:
             for line in lines:
@@ -393,8 +394,30 @@ class ParkingRearDetect(Node):
                 # Calculate slope and midpoint
                 slope = (x2 - x1) / (y2 - y1 + 1e-6)
                 mid_x = (x1 + x2) / 2
+                mid_y = (y1 + y2) / 2
                 
-                # Classify based on position
+                segments.append((x1, y1, x2, y2, mid_x, mid_y, slope))
+                slopes.append(slope)
+        
+        # Use parking ROI centroid as split origin; fallback to image center
+        M = cv2.moments(roi_mask)
+        if M["m00"] > 1e-3:
+            cx = M["m10"] / M["m00"]
+            cy = M["m01"] / M["m00"]
+        else:
+            cx = w // 2
+            cy = h // 2
+        
+        avg_slope = float(np.mean(slopes)) if slopes else None
+        
+        for (x1, y1, x2, y2, mid_x, mid_y, slope) in segments:
+            if avg_slope is not None:
+                x_on_split = cx + avg_slope * (mid_y - cy)
+                if mid_x < x_on_split:
+                    left_lines.append((x1, y1, x2, y2))
+                else:
+                    right_lines.append((x1, y1, x2, y2))
+            else:
                 if mid_x < cx:
                     left_lines.append((x1, y1, x2, y2))
                 else:
@@ -402,9 +425,9 @@ class ParkingRearDetect(Node):
 
         # Visualize detected segments for debugging
         for l in left_lines:
-            cv2.line(overlay, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 2) # Green
+            cv2.line(overlay, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 8) # Green
         for r in right_lines:
-            cv2.line(overlay, (r[0], r[1]), (r[2], r[3]), (0, 255, 255), 2) # Yellow
+            cv2.line(overlay, (r[0], r[1]), (r[2], r[3]), (0, 255, 255), 8) # Yellow
                     
         # Helper to fit a single line from segments
         def fit_single_line(line_segments):
@@ -426,35 +449,105 @@ class ParkingRearDetect(Node):
         center_line = None # (vx, vy, x0, y0)
         
         # Logic Selection
+        is_single_line = False
+        selected_line = None
+        
         if l_param is not None and r_param is not None:
-            # Case 3: Both lines visible -> Average
-            lvx, lvy, lx0, ly0 = l_param
-            rvx, rvy, rx0, ry0 = r_param
+            # Reject if the two lines are too non-parallel (e.g., endline + side line)
+            angle_l = math.atan2(l_param[1], l_param[0])
+            angle_r = math.atan2(r_param[1], r_param[0])
+            angle_diff = abs(angle_l - angle_r)
+            if angle_diff > math.pi:
+                angle_diff = 2 * math.pi - angle_diff
+            angle_diff_deg = math.degrees(angle_diff)
+            if angle_diff_deg >= 40.0:
+                return msg  # Do not generate center line for L-shaped pair
+            # Check horizontal distance between the two detected lines
+            dist = abs(r_param[2] - l_param[2])
             
-            avg_vx = (lvx + rvx) / 2
-            avg_vy = (lvy + rvy) / 2
-            avg_x0 = (lx0 + rx0) / 2
-            avg_y0 = (ly0 + ry0) / 2
-            center_line = (avg_vx, avg_vy, avg_x0, avg_y0)
-            
+            if dist >= 200.0:
+                # Case 3: Both lines visible and far enough apart -> Average
+                lvx, lvy, lx0, ly0 = l_param
+                rvx, rvy, rx0, ry0 = r_param
+                
+                avg_vx = (lvx + rvx) / 2
+                avg_vy = (lvy + rvy) / 2
+                avg_x0 = (lx0 + rx0) / 2
+                avg_y0 = (ly0 + ry0) / 2
+                center_line = (avg_vx, avg_vy, avg_x0, avg_y0)
+            else:
+                # Too close (< 200px), likely edges of the same line.
+                # Treat as single line. Prioritize Right line if available.
+                selected_line = r_param if r_param is not None else l_param
+                is_single_line = True
         elif r_param is not None:
-            # Case 1 & 2: Right line only -> Shift Left
-            vx, vy, x0, y0 = r_param
-            
-            # Assuming lines are roughly vertical.
-            # If vy > 0 (down), "Left" is -x direction relative to line.
-            # Ideally: perpendicular shift.
-            # Normal vector to (vx, vy) is (-vy, vx).
-            # If we assume (vx, vy) points DOWN, left is positive x in normal frame?
-            # Let's stick to simple horizontal shift for robustness as parking lines are vertical.
-            center_line = (vx, vy, x0 - half_width, y0)
-            
+            selected_line = r_param
+            is_single_line = True
         elif l_param is not None:
-            # Case 4: Left line only -> Shift Right
-            vx, vy, x0, y0 = l_param
-            center_line = (vx, vy, x0 + half_width, y0)
+            selected_line = l_param
+            is_single_line = True
             
-        else:
+        if is_single_line and selected_line is not None:
+            vx, vy, x0, y0 = selected_line
+            
+            base_dir = -1 if selected_line == r_param else 1  # Default: right line -> shift left, left line -> shift right
+            shift_direction = base_dir
+            apex_dir = 0
+            
+            # Find the Apex (farthest point in contour) to refine shift direction
+            cnts, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            if cnts:
+                c = max(cnts, key=cv2.contourArea)
+                
+                # Find point with max distance from the line
+                # Distance = |Ax + By + C| / sqrt(A^2 + B^2)
+                # Line: -vy*x + vx*y + (vy*x0 - vx*y0) = 0
+                A = -vy
+                B = vx
+                C = vy*x0 - vx*y0
+                denom = math.sqrt(A*A + B*B) + 1e-6
+                
+                max_dist = -1
+                apex = None
+                
+                # Sample points from contour (every 5th point to save time)
+                for p in c[::5]:
+                    pt = p[0]
+                    dist = abs(A*pt[0] + B*pt[1] + C) / denom
+                    if dist > max_dist:
+                        max_dist = dist
+                        apex = pt
+                
+                if apex is not None:
+                    # Determine side of Apex relative to Line
+                    # Use x intersection at apex_y
+                    if abs(vy) > 1e-3:
+                        x_on_line = x0 + (vx/vy) * (apex[1] - y0)
+                        if apex[0] < x_on_line:
+                            apex_dir = -1 # Apex is Left -> Shift Left
+                        else:
+                            apex_dir = 1  # Apex is Right -> Shift Right
+                    else:
+                        # Vertical line case (vy near 0), check y
+                        # If line is horizontal (vx near 1), this is weird for parking.
+                        pass
+            
+            # Apply shift
+            # Trust apex only if it agrees with base classification; otherwise keep base_dir
+            if apex_dir != 0 and apex_dir == base_dir:
+                shift_direction = apex_dir
+            
+            if shift_direction != 0:
+                center_line = (vx, vy, x0 + shift_direction * half_width, y0)
+            else:
+                # Fallback based on original classification
+                if selected_line == r_param:
+                    center_line = (vx, vy, x0 - half_width, y0) # Default Shift Left
+                else:
+                    center_line = (vx, vy, x0 + half_width, y0) # Default Shift Right
+
+        if center_line is None:
             return msg # Nothing found
 
         # Calculate Output & Visualize
@@ -559,9 +652,17 @@ class ParkingRearDetect(Node):
         if en_space:
             space_bev = self._postprocess_mask(space_bev)
             
-            # Fixed 15-pixel dilation for ROI
+            # Create a band around the boundary: Dilate - Erode
+            # Both 15px means +/- 7px effectively if kernel is 15 centered? 
+            # No, dilate with 15x15 extends 7px each side approx.
+            # User asked for "dilate 15 pixels in both directions". 
+            # So we dilate by 15px and erode by 15px relative to original boundary.
             kernel = np.ones((15, 15), np.uint8)
-            space_roi = cv2.dilate(space_bev, kernel, iterations=1)
+            dilated = cv2.dilate(space_bev, kernel, iterations=1)
+            eroded = cv2.erode(space_bev, kernel, iterations=1)
+            
+            # The band is the difference
+            space_roi = cv2.bitwise_xor(dilated, eroded)
         else:
             space_bev[:] = 0
             
@@ -675,11 +776,21 @@ class ParkingRearDetect(Node):
         
         # end_bev is valid if en_end is True.
         if en_end:
+            end_area_ratio = float(self.get_parameter("end_max_area_ratio").value)
+            end_area_limit = None
+            if end_area_ratio > 0.0:
+                end_area_limit = img_area * min(1.0, end_area_ratio)
             try:
                 cnts, _ = cv2.findContours(end_bev, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if cnts:
                     c = max(cnts, key=cv2.contourArea)
-                    if cv2.contourArea(c) > 50:
+                    area = cv2.contourArea(c)
+                    if area > 50:
+                        if end_area_limit is not None and area >= end_area_limit:
+                            self.get_logger().warn(
+                                f"EndLine contour area {area:.0f} exceeds limit {end_area_limit:.0f}, skipping."
+                            )
+                            raise ValueError("EndLine contour area too large")
                         # 1. Get all points
                         points = c[:, 0, :]
                         

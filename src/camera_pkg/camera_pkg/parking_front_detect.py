@@ -72,6 +72,7 @@ class ParkingFrontDetect(Node):
 
         self.declare_parameter("outline_min_area_px", 50)
         self.declare_parameter("outline_min_contour_area_px", 50)
+        self.declare_parameter("outline_max_area_ratio", 0.15)
 
         image_topic = self.get_parameter("image_topic").value
         detection_topic = self.get_parameter("detection_topic").value
@@ -385,54 +386,6 @@ class ParkingFrontDetect(Node):
         x_pix = float(np.clip(x_pix, 0.0, float(w - 1)))
         return x_pix
 
-    @staticmethod
-    def _outline_fitline_from_mask(binary: np.ndarray, min_contour_area_px: int):
-        out = {
-            "found": False,
-            "bx": 0.0,
-            "by": 0.0,
-            "yaw": 0.0,
-            "vx": 1.0,
-            "vy": 0.0,
-        }
-
-        b = (binary > 0).astype(np.uint8) * 255
-        if b.sum() == 0:
-            return out
-
-        cnts, _ = cv2.findContours(b, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not cnts:
-            return out
-
-        c = max(cnts, key=cv2.contourArea)
-        area = float(cv2.contourArea(c))
-        if area < float(max(1, min_contour_area_px)):
-            return out
-
-        points = c[:, 0, :]
-        if points.shape[0] < 2:
-            return out
-
-        line_params = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01)
-        vx, vy, _, _ = line_params.flatten()
-
-        if vx < 0:
-            vx, vy = -vx, -vy
-
-        sorted_indices = np.argsort(points[:, 1])[::-1]
-        bottom_point = points[sorted_indices[0]]
-        bx, by = bottom_point
-
-        yaw = math.atan2(float(vy), float(vx))
-
-        out["found"] = True
-        out["bx"] = float(bx)
-        out["by"] = float(by)
-        out["yaw"] = float(yaw)
-        out["vx"] = float(vx)
-        out["vy"] = float(vy)
-        return out
-
     def _parking_left_fitline(self, lot_bev: np.ndarray, min_contour_area_px: int):
         out = {"found": False}
 
@@ -483,6 +436,8 @@ class ParkingFrontDetect(Node):
         except Exception as e:
             self.get_logger().warn(f"Perspective transform invalid: {e}")
             return
+        frame_bev = self._make_bev_background(frame, M, w, h)
+        frame_bev_gray = cv2.cvtColor(frame_bev, cv2.COLOR_BGR2GRAY)
 
         lot_mask = np.zeros((h, w), np.uint8)
         space_mask = np.zeros((h, w), np.uint8)
@@ -575,22 +530,96 @@ class ParkingFrontDetect(Node):
             msg_parking.yaw = float(fit["yaw"])
         self.parking_pub.publish(msg_parking)
 
-        # === OUT_LINE (기존 로직 유지) ===
+        # === OUT_LINE (rear end-line 처럼) ===
         out_msg = OutLine()
         out_msg.found = False
+        outline_draw = None
+        stripe_region = None
 
         try:
-            min_area_px = int(self.get_parameter("outline_min_contour_area_px").value)
-            fit_o = self._outline_fitline_from_mask(outline_bev, min_contour_area_px=min_area_px)
-            if fit_o["found"]:
-                bx = fit_o["bx"]
-                by = fit_o["by"]
-                yaw = fit_o["yaw"]
+            cnts, _ = cv2.findContours(outline_bev, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if cnts:
+                c = max(cnts, key=cv2.contourArea)
+                area = float(cv2.contourArea(c))
 
-                out_msg.found = True
-                out_msg.x = float(np.clip(bx / float(w), 0.0, 1.0))
-                out_msg.y = float(np.clip(by / float(h), 0.0, 1.0))
-                out_msg.yaw = float(yaw)
+                min_area_px = max(
+                    1,
+                    int(self.get_parameter("outline_min_area_px").value),
+                    int(self.get_parameter("outline_min_contour_area_px").value),
+                )
+                if area >= float(min_area_px):
+                    max_area_ratio = float(self.get_parameter("outline_max_area_ratio").value)
+                    outline_area_limit = None
+                    if max_area_ratio > 0.0:
+                        outline_area_limit = img_area * min(1.0, max_area_ratio)
+
+                    if outline_area_limit is not None and area >= outline_area_limit:
+                        self.get_logger().warn(
+                            f"OutLine contour area {area:.0f} exceeds limit {outline_area_limit:.0f}, skipping."
+                        )
+                        raise ValueError("OutLine contour area too large")
+
+                    points = c[:, 0, :]
+
+                    region_mask = np.zeros_like(outline_bev)
+                    if points.shape[0] >= 3:
+                        peri = cv2.arcLength(c, True)
+                        poly = cv2.approxPolyDP(c, 0.02 * peri, True)
+                        if poly is not None and len(poly) >= 3:
+                            cv2.fillPoly(region_mask, [poly], 255)
+                    if region_mask.sum() == 0:
+                        region_mask = outline_bev.copy()
+
+                    white_mask = np.zeros_like(outline_bev)
+                    roi_vals = frame_bev_gray[region_mask > 0]
+                    if roi_vals.size > 0:
+                        roi_vals = roi_vals.reshape(-1, 1)
+                        thresh_val, _ = cv2.threshold(
+                            roi_vals, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+                        )
+                    else:
+                        thresh_val = 200.0
+
+                    thresh_val = float(np.clip(thresh_val, 50.0, 255.0))
+                    _, mask_raw = cv2.threshold(frame_bev_gray, thresh_val, 255, cv2.THRESH_BINARY)
+                    white_mask = cv2.bitwise_and(mask_raw, region_mask)
+
+                    band_kernel = np.ones((3, 3), np.uint8)
+                    white_mask = cv2.morphologyEx(white_mask, cv2.MORPH_OPEN, band_kernel)
+                    white_mask = cv2.dilate(white_mask, band_kernel, iterations=1)
+
+                    stripes = white_mask > 0
+
+                    stripe_points = None
+                    if np.any(stripes):
+                        white_cnts, _ = cv2.findContours(white_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        if white_cnts:
+                            stripe = max(white_cnts, key=cv2.contourArea)
+                            stripe_points = stripe[:, 0, :]
+                            stripe_region = np.zeros_like(outline_bev)
+                            cv2.drawContours(stripe_region, [stripe], -1, 255, thickness=cv2.FILLED)
+
+                    if stripe_points is not None and stripe_points.shape[0] >= 2:
+                        points = stripe_points
+
+                    if points.shape[0] >= 2:
+                        line_params = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01)
+                        vx, vy, _, _ = line_params.flatten()
+
+                        if vx < 0:
+                            vx, vy = -vx, -vy
+
+                        sorted_indices = np.argsort(points[:, 1])[::-1]
+                        bottom_point = points[sorted_indices[0]]
+                        bx, by = bottom_point
+
+                        yaw = math.atan2(float(vy), float(vx))
+
+                        out_msg.found = True
+                        out_msg.x = float(np.clip(bx / float(w), 0.0, 1.0))
+                        out_msg.y = float(np.clip(by / float(h), 0.0, 1.0))
+                        out_msg.yaw = float(yaw)
+                        outline_draw = (float(bx), float(by), float(vx), float(vy))
         except Exception as e:
             self.get_logger().warn(f"OutLine calculation failed: {e}")
 
@@ -599,7 +628,10 @@ class ParkingFrontDetect(Node):
         overlay = np.zeros((h, w, 3), np.uint8)
         overlay[lot_bev > 0] = (255, 255, 255)
         overlay[space_bev > 0] = (255, 0, 0)
-        overlay[outline_bev > 0] = (0, 0, 255)
+        if stripe_region is not None:
+            overlay[stripe_region > 0] = (0, 0, 255)
+        else:
+            overlay[outline_bev > 0] = (0, 0, 255)
 
         if fit["found"]:
             bx_pix = int(fit["bx"])
@@ -614,22 +646,13 @@ class ParkingFrontDetect(Node):
             cv2.line(overlay, (0, int(y_at_0)), (w, int(y_at_w)), (255, 0, 255), 10)
             cv2.circle(overlay, (bx_pix, by_pix), 8, (255, 0, 255), -1)
 
-        # ============================================================
-        # ### ADDED: out_line green line visualization (ONLY ADDITION)
-        # ============================================================
-        if out_msg.found:
-            bx_pix = int(out_msg.x * w)
-            by_pix = int(out_msg.y * h)
-            vx = math.cos(out_msg.yaw)
-            vy = math.sin(out_msg.yaw)
-            if vx < 0:
-                vx, vy = -vx, -vy
-            tan_yaw = vy / (vx + 1e-6)
+        if outline_draw is not None:
+            bx_pix, by_pix, vx_o, vy_o = outline_draw
+            tan_yaw = vy_o / (vx_o + 1e-6)
             y_at_0 = tan_yaw * (0 - bx_pix) + by_pix
             y_at_w = tan_yaw * (w - bx_pix) + by_pix
             cv2.line(overlay, (0, int(y_at_0)), (w, int(y_at_w)), (0, 255, 0), 10)
-            cv2.circle(overlay, (bx_pix, by_pix), 6, (0, 255, 0), -1)
-        # ============================================================
+            cv2.circle(overlay, (int(bx_pix), int(by_pix)), 6, (0, 255, 0), -1)
 
         self._draw_bev_cut_boundary(overlay, M, w, h)
 
@@ -642,8 +665,7 @@ class ParkingFrontDetect(Node):
         bg_opacity = float(self.get_parameter("bg_opacity").value)
 
         if bg_enable and bg_opacity > 0.001:
-            bev_bg = self._make_bev_background(frame, M, w, h)
-            bev = self._alpha_blend(bev_bg, overlay, bg_opacity)
+            bev = self._alpha_blend(frame_bev, overlay, bg_opacity)
         else:
             bev = overlay
 
