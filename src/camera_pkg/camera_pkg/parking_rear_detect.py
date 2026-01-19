@@ -35,10 +35,10 @@ class ParkingRearDetect(Node):
         )
         self.declare_parameter(
             "persp_dst",
-            [0.12, 0.7,
-    		 0.88, 0.7, 
-    		 0.86, 0.55, 
-    		 0.14, 0.55 ]
+            [0.12, 0.75,
+    		 0.88, 0.75, 
+    		 0.86, 0.6, 
+    		 0.14, 0.6 ]
         )
 
         self.declare_parameter("morph_kernel", 7)
@@ -582,7 +582,7 @@ class ParkingRearDetect(Node):
         # self.get_logger().info(f"yaw: {final_yaw:.1f}\n\n\n")
 
         # ---- ✅ 중앙선 각도 체크 추가 ----
-        if final_yaw < 0.7:
+        if final_yaw < 0.6:
             return msg   # 👉 found=False 유지하고 종료
         # -----------------------------------
         msg.found = True
