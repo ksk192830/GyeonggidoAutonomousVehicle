@@ -13,15 +13,15 @@ class ParkingNode(Node):
         super().__init__("motion_parking")
 
         # Parameters
-        self.margin = 4.0
+        self.margin = 7.0
 
-        self.parking_line_position_weight = 0
-        self.parking_line_angle_weight = 0
+        self.parking_line_position_weight = 135
+        self.parking_line_angle_weight = 0.5
 
-        self.parking_space_position_weight = 0
-        self.parking_space_angle_weight = 0
+        self.parking_space_position_weight = 10
+        self.parking_space_angle_weight = 10
 
-        self.out_line_position_weight = 0
+        self.out_line_position_weight = 1
         self.out_line_angle_weight = 20 / math.pi
         
         self.obstacle_in_right = False          # 최종 결과 (update_searching에서 쓰는 값)
@@ -106,21 +106,27 @@ class ParkingNode(Node):
     # -------------------------
     def control_loop(self):
         if self.state == "SEARCHING_SPACE":
+            # self.get_logger().info("🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴")
             self.update_searching()
 
         elif self.state == "ALIGN_TO_SPACE":
+            # self.get_logger().info("🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠🟠")
             self.update_alignment()
 
         elif self.state == "PARKING_IN":
+            # self.get_logger().info("🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡")
             self.update_parking()
 
         elif self.state == "STOPPED":
+            self.get_logger().info("🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢")
             self.update_stopped()
 
         elif self.state == "ESCAPE":
+            self.get_logger().info("🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵")
             self.update_escape()
         
         elif self.state == "TURN_RIGHT":
+            self.get_logger().info("🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣")
             self.turn_right()
 
     # -------------------------
@@ -129,13 +135,18 @@ class ParkingNode(Node):
     def update_searching(self):
         """1) 공간 찾기 전: 직진"""
         if self.parking_line_found:
-            steer_position = (self.parking_line_x- 0.7) * self.parking_line_position_weight
-            steer_angle = self.parking_line_yaw * self.parking_line_angle_weight
+            steer_position = (self.parking_line_x- 0.55) * self.parking_line_position_weight
+            if self.parking_line_yaw < 0:
+                yaw = 10 / 0.57 * (self.parking_line_yaw + 1.57)
+            else: 
+                yaw = 10 / 0.57 * (self.parking_line_yaw - 1.57)
+
+            steer_angle = yaw * self.parking_line_angle_weight
             
             mapped_steering = steer_position + steer_angle
             mapped_speed = 100
             
-            self.get_logger().info(f"position: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
+            self.get_logger().info(f"\nposition: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
             self.publish_cmd(steering=int(mapped_steering), speed=int(mapped_speed))
         if self.obstacle_in_right:
             self.get_logger().info("Parking space found → ALIGN_TO_SPACE")
@@ -156,9 +167,8 @@ class ParkingNode(Node):
     def update_parking(self):
         """3) 후진하여 주차"""
         if not self.parking_space_found:
-            self.publish_cmd(steering=0, speed=80)
-        return
-
+            self.publish_cmd(steering=-10, speed=100)
+            return
         steer_position = (self.parking_space_x - 0.5) * self.parking_space_position_weight
         steer_angle = self.parking_space_yaw * self.parking_space_angle_weight
 
@@ -175,14 +185,10 @@ class ParkingNode(Node):
         # --- 3) Steering 합성 ---
         mapped_steering = steer_position + steer_angle
         mapped_steering = max(min(mapped_steering, 10.0), -10.0)
+        self.get_logger().info(f"position: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
 
-        mapped_speed = 100
+        mapped_speed = -100
         
-        self.get_logger().info(
-            f"[PARKING_IN]\n"
-            f"pos_err={steer_position:.2f}, yaw_err={yaw_error:.2f}\n"
-            f"steer={mapped_steering:.2f}"
-        )
         self.publish_cmd(steering=int(mapped_steering), speed=int(mapped_speed))
 
         if self.end_line_found:

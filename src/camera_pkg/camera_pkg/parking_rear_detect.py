@@ -35,10 +35,10 @@ class ParkingRearDetect(Node):
         )
         self.declare_parameter(
             "persp_dst",
-            [0.12, 0.56,
-    		 0.88, 0.56, 
-    		 0.86, 0.3, 
-    		 0.14, 0.3 ]
+            [0.12, 0.7,
+    		 0.88, 0.7, 
+    		 0.86, 0.55, 
+    		 0.14, 0.55 ]
         )
 
         self.declare_parameter("morph_kernel", 7)
@@ -579,15 +579,21 @@ class ParkingRearDetect(Node):
         pt1 = (int(x_top), 0)
         pt2 = (int(x_bottom), h)
         cv2.line(overlay, pt1, pt2, (255, 255, 255), 5)
-        
+        # self.get_logger().info(f"yaw: {final_yaw:.1f}\n\n\n")
+
+        # ---- ✅ 중앙선 각도 체크 추가 ----
+        if final_yaw < 0.7:
+            return msg   # 👉 found=False 유지하고 종료
+        # -----------------------------------
         msg.found = True
+        
         msg.x = float(x_bottom / w) # Normalize 0~1
         msg.yaw = float(final_yaw)
         
         return msg
 
     def sync_callback(self, img_msg: Image, det_msg: DetectionArray):
-        self.get_logger().info("Sync callback entered")
+        # self.get_logger().info("Sync callback entered")
         try:
             frame = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
         except Exception as e:
