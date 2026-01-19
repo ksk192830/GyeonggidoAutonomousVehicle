@@ -29,7 +29,7 @@ class ParkingFrontDetect(Node):
         self.declare_parameter("detection_topic", "/cam0/detections")
         self.declare_parameter("viz_topic", "/front_viz")
 
-        self.declare_parameter("persp_src", [0.25, 1.0, 0.75, 1.0, 0.62, 0.6, 0.38, 0.6])
+        self.declare_parameter("persp_src", [0.24, 1.0, 0.76, 1.0, 0.62, 0.6, 0.38, 0.6])
         self.declare_parameter("persp_dst", [0.40, 1.0, 0.60, 1.0, 0.60, 0.6, 0.40, 0.6])
 
         self.declare_parameter("slop", 0.3)
