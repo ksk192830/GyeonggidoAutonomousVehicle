@@ -12,6 +12,8 @@ from rclpy.qos import (
     QoSReliabilityPolicy
 )
 
+from interfaces_pkg.msg import State
+
 import math
 import tf2_ros
 import geometry_msgs.msg
@@ -58,8 +60,18 @@ class LidarScanNode(Node):
         self.declare_parameter('pub_topic', PUB_TOPIC_NAME)
         self.declare_parameter('lidar_port', LIDAR_PORT)
 
+        # scan publish 허용 state 목록
+        self.declare_parameter("allowed_states", ["__ALL__"])
+        self.allowed_states = list(
+            self.get_parameter("allowed_states").get_parameter_value().string_array_value
+        )
+        self.current_state = None
+
         self.pub_topic = self.get_parameter('pub_topic').get_parameter_value().string_value
         self.lidar_port = self.get_parameter('lidar_port').get_parameter_value().string_value
+
+        #Subscriber
+        self.state_sub = self.create_subscription(State, "/motion_state", self.state_cb, qos)
 
         # Publisher
         self.publisher_ = self.create_publisher(LaserScan, self.pub_topic, qos_profile)
@@ -102,6 +114,12 @@ class LidarScanNode(Node):
 
     def publish_from_lidar(self):
         """Read from real lidar and publish LaserScan."""
+
+        # state가 있고, allowed_states에도 없으면 skip
+        if self.current_state is not None:
+            if "__ALL__" not in self.allowed_states and self.current_state not in self.allowed_states:
+                return
+            
         # broadcast TF
         self.broadcast_tf()
 
@@ -210,6 +228,9 @@ class LidarScanNode(Node):
         except LPFL.RPLidarException as e:
             # Cannot use logger reliably in destructor, so just ignore
             pass
+    
+    def state_cb(self, msg: State):
+        self.current_state = msg.state
 
 
 def main(args=None):
