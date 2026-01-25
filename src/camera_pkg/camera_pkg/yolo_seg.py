@@ -9,7 +9,8 @@ import numpy as np
 
 from ultralytics import YOLO
 from interfaces_pkg.msg import Detection, DetectionArray, Mask, Point2D
-from interfaces_pkg.msg import BoundingBox2D
+from interfaces_pkg.msg import BoundingBox2D, State
+from rclpy.parameter import Parameter
 
 import os
 
@@ -39,6 +40,13 @@ class YoloSegNode(Node):
         self.declare_parameter("mask_alpha", 0.25)        # transparency for filled masks
         self.declare_parameter("color_by", "class")       # "class" or "instance"
 
+        # segmentation 허용 state 목록
+        self.declare_parameter("allowed_states", ["__ALL__"])
+        self.allowed_states = list(
+            self.get_parameter("allowed_states").get_parameter_value().string_array_value
+        )
+        self.current_state = None
+
         self.model_path = self.get_parameter("model_path").get_parameter_value().string_value
         self.device = self.get_parameter("device").get_parameter_value().string_value
         self.threshold = self.get_parameter("threshold").get_parameter_value().double_value
@@ -60,6 +68,7 @@ class YoloSegNode(Node):
         self.publisher = self.create_publisher(DetectionArray, "detections", qos)
         self.subscription = self.create_subscription(Image, "image_raw", self.image_cb, qos)
         self.vis_pub = self.create_publisher(Image, "seg_vis", qos)
+        self.state_sub = self.create_subscription(State, "/motion_state", self.state_cb, qos)
 
         # Load model
         if not os.path.exists(self.model_path):
@@ -74,10 +83,20 @@ class YoloSegNode(Node):
             self.get_logger().error(f"Failed to load model: {e}")
             return
 
+    def state_cb(self, msg: State):
+        self.current_state = msg.state
+ 
     def image_cb(self, msg: Image):
         if self.model is None:
             return
 
+        # self.get_logger().info(f"Seg running (state={self.current_state}, \nallowed={self.allowed_states})\n\n\n")
+        
+        # state가 있고, allowed_states에도 없으면 skip
+        if self.current_state is not None:
+            if "__ALL__" not in self.allowed_states and self.current_state not in self.allowed_states:
+                return
+    
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
         try:
