@@ -95,7 +95,20 @@ class YoloSegNode(Node):
         # state가 있고, allowed_states에도 없으면 skip
         if self.current_state is not None:
             if "__ALL__" not in self.allowed_states and self.current_state not in self.allowed_states:
+                    # seg_vis: image_raw 그대로
+                try:
+                    cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+                    vis_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding="bgr8")
+                    vis_msg.header = msg.header
+                    self.vis_pub.publish(vis_msg)
+                    detections_msg = DetectionArray()
+                    detections_msg.header.stamp = self.get_clock().now().to_msg()
+                    detections_msg.header.frame_id = msg.header.frame_id
+                    self.publisher.publish(detections_msg)
+                except Exception:
+                    pass
                 return
+                
     
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
