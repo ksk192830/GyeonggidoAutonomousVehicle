@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import LaserScan
-from interfaces_pkg.msg import ParkingSpace, MotionCommand, ParkingLot, EndLine, OutLine
+from interfaces_pkg.msg import ParkingSpace, MotionCommand, ParkingLot, EndLine, OutLine, State
 
 import math
 
@@ -57,6 +57,8 @@ class ParkingNode(Node):
 
         # Publisher
         self.cmd_pub = self.create_publisher(MotionCommand, "/motion_command", 10)
+        self.state_pub = self.create_publisher(State, "/motion_state", 10)
+
 
         # Timer 
         self.timer = self.create_timer(0.1, self.control_loop)
@@ -109,6 +111,7 @@ class ParkingNode(Node):
     # Main control loop
     # -------------------------
     def control_loop(self):
+        self.publish_state()
         if self.state == "SEARCHING_SPACE":
             # self.get_logger().info("🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴")
             self.update_searching()
@@ -130,7 +133,7 @@ class ParkingNode(Node):
             self.update_escape()
         
         elif self.state == "TURN_RIGHT":
-            self.get_logger().info("🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣")
+            # self.get_logger().info("🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣🟣")
             self.turn_right()
 
     # -------------------------
@@ -317,6 +320,14 @@ class ParkingNode(Node):
         msg.right_speed = int(speed)
 
         self.cmd_pub.publish(msg)
+
+    # -------------------------
+    # Current State 생성
+    # -------------------------
+    def publish_state(self):
+        msg = State()
+        msg.state = self.state
+        self.state_pub.publish(msg)    
 
 def main(args=None):
     rclpy.init(args=args)
