@@ -155,7 +155,7 @@ def generate_launch_description():
             parameters=[
                 {'pub_topic': '/scan_raw'},    # MotionNode에서 구독하는 토픽 이름과 맞추기
                 {'lidar_port': '/dev/ttyUSB0'},
-                {'allowed_states': ['ALIGN_TO_SPACE']},
+                {'allowed_states': ['SEARCHING_SPACE']},
             ]
         ),
         # #################### LIDAR Cluster ######################
