@@ -62,16 +62,14 @@ class LidarScanNode(Node):
 
         # scan publish 허용 state 목록
         self.declare_parameter("allowed_states", ["__ALL__"])
-        self.allowed_states = list(
-            self.get_parameter("allowed_states").get_parameter_value().string_array_value
-        )
+        self.allowed_states = list(self.get_parameter("allowed_states").get_parameter_value().string_array_value)
         self.current_state = None
 
         self.pub_topic = self.get_parameter('pub_topic').get_parameter_value().string_value
         self.lidar_port = self.get_parameter('lidar_port').get_parameter_value().string_value
 
         #Subscriber
-        self.state_sub = self.create_subscription(State, "/motion_state", self.state_cb, qos)
+        self.state_sub = self.create_subscription(State, "/motion_state", self.state_cb, 10)
 
         # Publisher
         self.publisher_ = self.create_publisher(LaserScan, self.pub_topic, qos_profile)
@@ -115,13 +113,14 @@ class LidarScanNode(Node):
     def publish_from_lidar(self):
         """Read from real lidar and publish LaserScan."""
 
+        # broadcast TF
+        self.broadcast_tf()
+
         # state가 있고, allowed_states에도 없으면 skip
         if self.current_state is not None:
             if "__ALL__" not in self.allowed_states and self.current_state not in self.allowed_states:
                 return
             
-        # broadcast TF
-        self.broadcast_tf()
 
         if self.lidar_sensor_data_generator is None:
             self.get_logger().error("LIDAR data generator is not initialized")
