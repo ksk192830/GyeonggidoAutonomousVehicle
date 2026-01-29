@@ -9,12 +9,13 @@ from rclpy.qos import (
 )
 
 from sensor_msgs.msg import Image
-from interfaces_pkg.msg import DetectionArray
+from interfaces_pkg.msg import DetectionArray, EndLine, ParkingSpace
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 import cv2
 import numpy as np
+import math
 
 
 class ParkingRearDetect(Node):
@@ -34,14 +35,14 @@ class ParkingRearDetect(Node):
         )
         self.declare_parameter(
             "persp_dst",
-            [0.12, 0.56,
-    		 0.88, 0.56, 
-    		 0.86, 0.3, 
-    		 0.14, 0.3 ]
+            [0.12, 0.75,
+    		 0.88, 0.75, 
+    		 0.86, 0.6, 
+    		 0.14, 0.6 ]
         )
 
         self.declare_parameter("morph_kernel", 7)
-        self.declare_parameter("slop", 0.3)
+        self.declare_parameter("slop", 1.0)
         self.declare_parameter("fill_holes", True)
 
         self.declare_parameter("simplify_enable", True)
@@ -76,6 +77,10 @@ class ParkingRearDetect(Node):
         self.declare_parameter("enable_parking_lot", False)
         self.declare_parameter("enable_parking_space", True)
         self.declare_parameter("enable_end_line", True)
+        self.declare_parameter("end_max_area_ratio", 0.15)
+        
+        # Fixed parking space width in pixels for BEV
+        self.declare_parameter("parking_width_px", 528.0)
 
         image_topic = self.get_parameter("image_topic").value
         detection_topic = self.get_parameter("detection_topic").value
@@ -98,9 +103,11 @@ class ParkingRearDetect(Node):
         self.ts.registerCallback(self.sync_callback)
 
         self.viz_pub = self.create_publisher(Image, viz_topic, qos)
-
+        self.end_line_pub = self.create_publisher(EndLine, "/rear_end_line", 10)
+        self.parking_space_pub = self.create_publisher(ParkingSpace, "/rear_parking_space", 10)
+        
         self.get_logger().info(
-            f"parking_rear_detect initialized. Sub: {image_topic}, {detection_topic} -> Pub: {viz_topic}"
+            f"parking_rear_detect initialized. Sub: {image_topic}, {detection_topic} -> Pub: {viz_topic}, /rear_end_line, /rear_parking_space"
         )
 
     def _get_perspective_matrix(self, w: int, h: int) -> np.ndarray:
@@ -319,7 +326,274 @@ class ParkingRearDetect(Node):
             return base_bgr
         return cv2.addWeighted(base_bgr, a, overlay_bgr, 1.0 - a, 0.0)
 
+    @staticmethod
+    def _scale_contour(cnt, scale):
+        M = cv2.moments(cnt)
+        if M['m00'] == 0:
+            return cnt
+        cx = int(M['m10']/M['m00'])
+        cy = int(M['m01']/M['m00'])
+
+        cnt_norm = cnt - [cx, cy]
+        cnt_scaled = cnt_norm * scale
+        cnt_scaled = cnt_scaled + [cx, cy]
+        return cnt_scaled.astype(np.int32)
+
+    def _detect_parking_center_line(self, frame_bev, roi_mask, overlay):
+        """
+        Detect parking lines and calculate center line based on scenarios:
+        1. Right line only -> Shift Left by half width
+        2. Both lines -> Average
+        3. Left line only -> Shift Right by half width (fallback)
+        """
+        msg = ParkingSpace()
+        msg.found = False
+        
+        h, w = frame_bev.shape[:2]
+        target_width = float(self.get_parameter("parking_width_px").value)
+        half_width = target_width / 2.0
+        
+        # 1. Pre-processing
+        gray = cv2.cvtColor(frame_bev, cv2.COLOR_BGR2GRAY)
+        
+        # Create a mask for valid image area (non-black) to ignore BEV borders
+        _, valid_mask = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
+        # Erode the valid mask slightly to remove the boundary edge itself
+        valid_mask = cv2.erode(valid_mask, np.ones((5, 5), np.uint8), iterations=2)
+        
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(gray, 50, 150)
+        
+        # Mask edges: Keep edges only inside the valid image area AND inside the ROI
+        final_mask = cv2.bitwise_and(valid_mask, roi_mask)
+        masked_edges = cv2.bitwise_and(edges, edges, mask=final_mask)
+        
+        # 2. Hough Transform to find lines
+        lines = cv2.HoughLinesP(
+            masked_edges,
+            rho=1,
+            theta=np.pi / 180,
+            threshold=50,
+            minLineLength=30,
+            maxLineGap=20
+        )
+        
+        left_lines = []
+        right_lines = []
+        segments = []
+        slopes = []
+        
+        if lines is not None:
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                
+                # Filter out horizontal-ish lines
+                if abs(x2 - x1) > abs(y2 - y1) * 2: # Very horizontal
+                    continue
+                    
+                # Calculate slope and midpoint
+                slope = (x2 - x1) / (y2 - y1 + 1e-6)
+                mid_x = (x1 + x2) / 2
+                mid_y = (y1 + y2) / 2
+                
+                segments.append((x1, y1, x2, y2, mid_x, mid_y, slope))
+                slopes.append(slope)
+        
+        # Use parking ROI centroid as split origin; fallback to image center
+        M = cv2.moments(roi_mask)
+        if M["m00"] > 1e-3:
+            cx = M["m10"] / M["m00"]
+            cy = M["m01"] / M["m00"]
+        else:
+            cx = w // 2
+            cy = h // 2
+        
+        avg_slope = float(np.mean(slopes)) if slopes else None
+        
+        for (x1, y1, x2, y2, mid_x, mid_y, slope) in segments:
+            if avg_slope is not None:
+                x_on_split = cx + avg_slope * (mid_y - cy)
+                if mid_x < x_on_split:
+                    left_lines.append((x1, y1, x2, y2))
+                else:
+                    right_lines.append((x1, y1, x2, y2))
+            else:
+                if mid_x < cx:
+                    left_lines.append((x1, y1, x2, y2))
+                else:
+                    right_lines.append((x1, y1, x2, y2))
+
+        # Visualize detected segments for debugging
+        for l in left_lines:
+            cv2.line(overlay, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 8) # Green
+        for r in right_lines:
+            cv2.line(overlay, (r[0], r[1]), (r[2], r[3]), (0, 255, 255), 8) # Yellow
+                    
+        # Helper to fit a single line from segments
+        def fit_single_line(line_segments):
+            if not line_segments:
+                return None
+            pts = []
+            for l in line_segments:
+                pts.append([l[0], l[1]])
+                pts.append([l[2], l[3]])
+            pts = np.array(pts, dtype=np.int32)
+            
+            # fitLine returns normalized vector (vx, vy) and point (x0, y0)
+            [vx, vy, x0, y0] = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
+            return (float(vx), float(vy), float(x0), float(y0))
+
+        l_param = fit_single_line(left_lines)
+        r_param = fit_single_line(right_lines)
+        
+        center_line = None # (vx, vy, x0, y0)
+        
+        # Logic Selection
+        is_single_line = False
+        selected_line = None
+        
+        if l_param is not None and r_param is not None:
+            # Reject if the two lines are too non-parallel (e.g., endline + side line)
+            angle_l = math.atan2(l_param[1], l_param[0])
+            angle_r = math.atan2(r_param[1], r_param[0])
+            angle_diff = abs(angle_l - angle_r)
+            if angle_diff > math.pi:
+                angle_diff = 2 * math.pi - angle_diff
+            angle_diff_deg = math.degrees(angle_diff)
+            if angle_diff_deg >= 40.0:
+                return msg  # Do not generate center line for L-shaped pair
+            # Check horizontal distance between the two detected lines
+            dist = abs(r_param[2] - l_param[2])
+            
+            if dist >= 200.0:
+                # Case 3: Both lines visible and far enough apart -> Average
+                lvx, lvy, lx0, ly0 = l_param
+                rvx, rvy, rx0, ry0 = r_param
+                
+                avg_vx = (lvx + rvx) / 2
+                avg_vy = (lvy + rvy) / 2
+                avg_x0 = (lx0 + rx0) / 2
+                avg_y0 = (ly0 + ry0) / 2
+                center_line = (avg_vx, avg_vy, avg_x0, avg_y0)
+            else:
+                # Too close (< 200px), likely edges of the same line.
+                # Treat as single line. Prioritize Right line if available.
+                selected_line = r_param if r_param is not None else l_param
+                is_single_line = True
+        elif r_param is not None:
+            selected_line = r_param
+            is_single_line = True
+        elif l_param is not None:
+            selected_line = l_param
+            is_single_line = True
+            
+        if is_single_line and selected_line is not None:
+            vx, vy, x0, y0 = selected_line
+            
+            base_dir = -1 if selected_line == r_param else 1  # Default: right line -> shift left, left line -> shift right
+            shift_direction = base_dir
+            apex_dir = 0
+            
+            # Find the Apex (farthest point in contour) to refine shift direction
+            cnts, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            if cnts:
+                c = max(cnts, key=cv2.contourArea)
+                
+                # Find point with max distance from the line
+                # Distance = |Ax + By + C| / sqrt(A^2 + B^2)
+                # Line: -vy*x + vx*y + (vy*x0 - vx*y0) = 0
+                A = -vy
+                B = vx
+                C = vy*x0 - vx*y0
+                denom = math.sqrt(A*A + B*B) + 1e-6
+                
+                max_dist = -1
+                apex = None
+                
+                # Sample points from contour (every 5th point to save time)
+                for p in c[::5]:
+                    pt = p[0]
+                    dist = abs(A*pt[0] + B*pt[1] + C) / denom
+                    if dist > max_dist:
+                        max_dist = dist
+                        apex = pt
+                
+                if apex is not None:
+                    # Determine side of Apex relative to Line
+                    # Use x intersection at apex_y
+                    if abs(vy) > 1e-3:
+                        x_on_line = x0 + (vx/vy) * (apex[1] - y0)
+                        if apex[0] < x_on_line:
+                            apex_dir = -1 # Apex is Left -> Shift Left
+                        else:
+                            apex_dir = 1  # Apex is Right -> Shift Right
+                    else:
+                        # Vertical line case (vy near 0), check y
+                        # If line is horizontal (vx near 1), this is weird for parking.
+                        pass
+            
+            # Apply shift
+            # Trust apex only if it agrees with base classification; otherwise keep base_dir
+            if apex_dir != 0 and apex_dir == base_dir:
+                shift_direction = apex_dir
+            
+            if shift_direction != 0:
+                center_line = (vx, vy, x0 + shift_direction * half_width, y0)
+            else:
+                # Fallback based on original classification
+                if selected_line == r_param:
+                    center_line = (vx, vy, x0 - half_width, y0) # Default Shift Left
+                else:
+                    center_line = (vx, vy, x0 + half_width, y0) # Default Shift Right
+
+        if center_line is None:
+            return msg # Nothing found
+
+        # Calculate Output & Visualize
+        vx, vy, x0, y0 = center_line
+        
+        # Avoid division by zero
+        if abs(vy) < 1e-3: 
+             return msg
+             
+        # Find x intersection with bottom (y=h)
+        # (x - x0)/vx = (y - y0)/vy  => x = x0 + (vx/vy)*(y-y0)
+        x_bottom = x0 + (vx/vy) * (h - y0)
+        
+        # Find x intersection with top (y=0) for visualization
+        x_top = x0 + (vx/vy) * (0 - y0)
+        
+        # Yaw calculation (angle with vertical)
+        # atan2(vy, vx) is angle of vector.
+        # We usually want 0 for vertical up, or vertical down.
+        # Let's use standard yaw convention: atan2(dy, dx)
+        # But car control usually expects error angle.
+        final_yaw = math.atan2(vy, vx)
+        
+        # Normalize yaw to be consistent?
+        # If line points down (vy>0), yaw is ~90 deg (pi/2).
+        # If vertical up (vy<0), yaw is ~-90 deg (-pi/2).
+        
+        # Visualize Center Line (Thick White)
+        pt1 = (int(x_top), 0)
+        pt2 = (int(x_bottom), h)
+        cv2.line(overlay, pt1, pt2, (255, 255, 255), 5)
+        # self.get_logger().info(f"yaw: {final_yaw:.1f}\n\n\n")
+
+        # ---- ✅ 중앙선 각도 체크 추가 ----
+        if final_yaw < 0.6:
+            return msg   # 👉 found=False 유지하고 종료
+        # -----------------------------------
+        msg.found = True
+        
+        msg.x = float(x_bottom / w) # Normalize 0~1
+        msg.yaw = float(final_yaw)
+        
+        return msg
+
     def sync_callback(self, img_msg: Image, det_msg: DetectionArray):
+        # self.get_logger().info("Sync callback entered")
         try:
             frame = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
         except Exception as e:
@@ -371,17 +645,33 @@ class ParkingRearDetect(Node):
         lot_bev = cv2.warpPerspective(lot_mask, M, (w, h), flags=cv2.INTER_NEAREST)
         space_bev = cv2.warpPerspective(space_mask, M, (w, h), flags=cv2.INTER_NEAREST)
         end_bev = cv2.warpPerspective(end_mask, M, (w, h), flags=cv2.INTER_NEAREST)
+        
+        # Warp original frame for edge detection
+        frame_bev = cv2.warpPerspective(frame, M, (w, h), flags=cv2.INTER_LINEAR)
 
         if en_lot:
             lot_bev = self._postprocess_mask(lot_bev)
         else:
             lot_bev[:] = 0
 
+        space_roi = np.zeros((h, w), np.uint8)
         if en_space:
             space_bev = self._postprocess_mask(space_bev)
+            
+            # Create a band around the boundary: Dilate - Erode
+            # Both 15px means +/- 7px effectively if kernel is 15 centered? 
+            # No, dilate with 15x15 extends 7px each side approx.
+            # User asked for "dilate 15 pixels in both directions". 
+            # So we dilate by 15px and erode by 15px relative to original boundary.
+            kernel = np.ones((15, 15), np.uint8)
+            dilated = cv2.dilate(space_bev, kernel, iterations=1)
+            eroded = cv2.erode(space_bev, kernel, iterations=1)
+            
+            # The band is the difference
+            space_roi = cv2.bitwise_xor(dilated, eroded)
         else:
             space_bev[:] = 0
-
+            
         if en_end:
             end_bev = self._postprocess_mask(end_bev)
         else:
@@ -426,6 +716,11 @@ class ParkingRearDetect(Node):
                     force_convex=force_convex,
                     convex_max_area_growth=growth,
                 )
+            
+            # We use space_roi for detection, but space_bev for visualization overlay logic?
+            # Actually, let's keep space_bev as the original mask for visualization logic
+            # But update the detection call below.
+            pass 
 
         union_bev = self._join_masks(lot_bev, space_bev)
 
@@ -448,10 +743,12 @@ class ParkingRearDetect(Node):
             lot_bev[:] = 0
 
         overlay = np.zeros((h, w, 3), np.uint8)
+        
         if en_lot:
             overlay[lot_bev > 0] = (255, 255, 255)
         if en_space:
-            overlay[space_bev > 0] = (255, 0, 0)
+            # Visualize the 1.2x dilated region (space_roi) instead of the original mask
+            overlay[space_roi > 0] = (255, 0, 0)
         if en_end:
             overlay[end_bev > 0] = (0, 0, 255)
 
@@ -464,6 +761,85 @@ class ParkingRearDetect(Node):
                 self._draw_polys(overlay, space_polys, (0, 255, 0), thickness=2)
             if en_lot or en_space:
                 self._draw_polys(overlay, union_polys, (255, 0, 255), thickness=2)
+
+        # --- Parking Space Center Line ---
+        space_msg = ParkingSpace()
+        space_msg.found = False
+        if en_space:
+            try:
+                 # Pass 'frame_bev' (image), 'roi_mask' (dilated mask), and 'overlay'
+                 # Note: 'space_roi' was defined earlier as dilated mask
+                 space_msg = self._detect_parking_center_line(frame_bev, space_roi, overlay)
+            except Exception as e:
+                self.get_logger().warn(f"Space center calculation failed: {e}")
+        
+        self.parking_space_pub.publish(space_msg)
+        # ---------------------------------
+
+        # --- EndLine Calculation & Visualization (Simple & Robust) ---
+        end_msg = EndLine()
+        end_msg.found = False
+        
+        # end_bev is valid if en_end is True.
+        if en_end:
+            end_area_ratio = float(self.get_parameter("end_max_area_ratio").value)
+            end_area_limit = None
+            if end_area_ratio > 0.0:
+                end_area_limit = img_area * min(1.0, end_area_ratio)
+            try:
+                cnts, _ = cv2.findContours(end_bev, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if cnts:
+                    c = max(cnts, key=cv2.contourArea)
+                    area = cv2.contourArea(c)
+                    if area > 50:
+                        if end_area_limit is not None and area >= end_area_limit:
+                            self.get_logger().warn(
+                                f"EndLine contour area {area:.0f} exceeds limit {end_area_limit:.0f}, skipping."
+                            )
+                            raise ValueError("EndLine contour area too large")
+                        # 1. Get all points
+                        points = c[:, 0, :]
+                        
+                        # 2. Robust Direction: Fit line to ALL points
+                        # This gives the average slope of the entire blob
+                        line_params = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01)
+                        vx, vy, _, _ = line_params.flatten()
+                        
+                        # Normalize direction (pointing right)
+                        if vx < 0:
+                            vx, vy = -vx, -vy
+                        
+                        # 3. Anchor Point: The bottom-most point (Max Y)
+                        # Sort by Y descending, take the first one
+                        sorted_indices = np.argsort(points[:, 1])[::-1]
+                        bottom_point = points[sorted_indices[0]]
+                        bx, by = bottom_point
+                        
+                        # 4. Calculate Yaw
+                        yaw = math.atan2(vy, vx)
+                        
+                        # 5. Publish
+                        end_msg.found = True
+                        end_msg.x = float(bx)
+                        end_msg.y = float(by)
+                        end_msg.yaw = float(yaw)
+                        
+                        # 6. Visualization
+                        # Draw line passing through (bx, by) with slope (vy/vx)
+                        # y = tan(yaw) * (x - bx) + by
+                        tan_yaw = vy / (vx + 1e-6) # Avoid division by zero
+                        
+                        y_at_0 = tan_yaw * (0 - bx) + by
+                        y_at_w = tan_yaw * (w - bx) + by
+                        
+                        cv2.line(overlay, (0, int(y_at_0)), (w, int(y_at_w)), (0, 255, 0), 10)
+
+            except Exception as e:
+                self.get_logger().warn(f"EndLine calculation failed: {e}")
+        else:
+            pass
+
+        self.end_line_pub.publish(end_msg)
 
         bg_enable = bool(self.get_parameter("bg_enable").value)
         bg_opacity = float(self.get_parameter("bg_opacity").value)
