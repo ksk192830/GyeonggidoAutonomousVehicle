@@ -22,25 +22,14 @@ class MotionNode(Node):
         # Publisher
         self.motion_pub = self.create_publisher(MotionCommand, 'motion_command', 10)
 
-        # 1차선 물체 크기별 구간 임계값 (튜닝)
-        # self.far_height  = 300  # m 단위, 이보다 멀면 1. 정지
-        # self.accurate_height = 450   # 2. 직진
-        # self.ambiguous_height = 480  # 3. 정지
-
         # traffic light
         self.traffic_area_threshold = 28000
         self.red_required_count = 3
         self.red_clear_required_count = 3
 
-        # 장애물 감지
-        self.lidar_obstacle_counter = 0
-        self.lidar_obstacle_threshold = 3
-        self.obstacle_flag = False
-
-
         # 상태 변수
         self.current_lane = 2
-        self.target_lane = 2
+        self.target_lane = 1
         self.is_changing_lane = False
         self.wait_for_red_clear = False
         self.once = True
@@ -58,6 +47,12 @@ class MotionNode(Node):
         # 라이다로 2차선에서 1차선 변경용
         self.lidar_lane_change_counter   = 0
         self.lidar_lane_change_threshold = 5
+
+        # 카메라로 1차선에서 2차선 변경용
+        self.front_vehicle_height = 380
+        self.camera_lane_change_counter = 0
+        self.camera_lane_change_threshold = 1 # 수정 필요
+
 
         # 연속 장애물 없음 감지용 변수
         self.no_obstacle_counter = 0
@@ -194,18 +189,18 @@ class MotionNode(Node):
         # ==========================================================
 
         # ================= 목표를 1차선에서  2차선 변경 ================
-        if self.current_lane == 1 :
-            if self.latest_lidar_avg is not None and self.latest_lidar_avg < 1.0:
-                self.lidar_lane_change_counter += 1
+        if self.current_lane == 1 and self.obstacle_detected :
+            if self.obstacle_height > self.front_vehicle_height:
+                self.camera_lane_change_counter += 1
             else:
-                self.lidar_lane_change_counter = 0
-
-            if self.lidar_lane_change_counter >= self.lidar_lane_change_threshold:
+                self.camera_lane_change_counter = 0
+            
+            if self.camera_lane_change_counter >= self.camera_lane_change_threshold:
                 self.target_lane = 2
                 self.is_changing_lane = True
                 self.get_logger().info(
-                    f"🚧 LiDAR 장애물 {self.lidar_lane_change_threshold}회 연속 감지 "
-                    f"🔄 🔄 🔄 🔄 🔄 🔄 🔄 (avg={self.latest_lidar_avg:.2f}m) → 1차선 변경"
+                    f"{self.camera_lane_change_threshold}회 연속 감지 "
+                    f"🔄 🔄 🔄 🔄 🔄 🔄 🔄"
                 )
                 self.lidar_lane_change_counter = 0
                 return
@@ -216,7 +211,7 @@ class MotionNode(Node):
 
         # Lane change logic
         if self.is_changing_lane:
-            # self.get_logger().info(f"🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄")
+            self.get_logger().info(f"🔄🔄\n")
             cmd.steering = -10 if self.target_lane == 1 else 10
             cmd.left_speed = lane_change_speed
             cmd.right_speed = lane_change_speed
@@ -225,7 +220,6 @@ class MotionNode(Node):
             # Lane change 상태 해제
             if self.current_lane == self.target_lane and abs(vehicle_position_x) <= 200:
                 self.is_changing_lane = False
-                self.obstacle_flag = False
                 self.latest_lidar_avg = None
                 self.get_logger().info(f"✅ Lane change complete: now on lane {self.current_lane}")
         
