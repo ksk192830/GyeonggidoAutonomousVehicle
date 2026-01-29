@@ -65,11 +65,11 @@ class CrossWalkNode(Node):
 
     def extract_cross_walk(self, detections: DetectionArray, img_w: int, img_h: int):
         boxes = []
-        max_h = 0
+        top_y_min = img_h
         found = False
 
         for det in detections.detections:
-            if det.class_name != "cross_walk":
+            if det.class_name != "crosswalk":
                 continue
 
             cx = int(det.bbox.center.position.x)
@@ -90,10 +90,15 @@ class CrossWalkNode(Node):
 
             boxes.append((x1, y1, x2, y2))
             found = True
-            if h > max_h:
-                max_h = h
 
-        return found, max_h, boxes
+            if y1 < top_y_min:
+                top_y_min = y1
+
+        if not found:
+            top_y_min = 0
+
+        return found, top_y_min, boxes
+
 
 
 def main(args=None):

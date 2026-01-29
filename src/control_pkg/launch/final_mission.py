@@ -81,6 +81,15 @@ def generate_launch_description():
             output='screen',
             parameters=[]
         ),
+
+        #################### CROSS WALK DETECT ######################
+        Node(
+            package='camera_pkg',
+            executable='cross_walk_detect',  
+            name='cross_walk',
+            output='screen',
+            parameters=[],
+        ),
         
         #################### LIDAR SCAN ######################
         Node(

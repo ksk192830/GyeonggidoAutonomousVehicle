@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from interfaces_pkg.msg import LaneInfo, MotionCommand
+from interfaces_pkg.msg import LaneInfo, MotionCommand, CrossWalk
 from sensor_msgs.msg import LaserScan
 import re
 import math
@@ -17,6 +17,7 @@ class MotionNode(Node):
         self.create_subscription(LaneInfo, '/cam0/lane_info', self.lane_info_callback, 10)
         self.create_subscription(String, 'traffic_light_result', self.traffic_callback, 10)
         self.create_subscription(String, 'obstacle_result', self.obstacle_callback, 10)
+        self.create_subscription(CrossWalk, 'cross_walk_result', self.cross_walk_callback, 10)
         self.create_subscription(LaserScan, '/scan_raw', self.lidar_callback, 10)
 
         # Publisher
@@ -27,15 +28,21 @@ class MotionNode(Node):
         self.red_required_count = 3
         self.red_clear_required_count = 3
 
+        # crosswalk
+        self.cross_walk_height_threshold = 500
+
         # 상태 변수
         self.current_lane = 2
-        self.target_lane = 1
+        self.target_lane = 2
         self.is_changing_lane = False
         self.wait_for_red_clear = False
         self.once = True
 
         self.backward_motion = False
         self.forward_motion = False
+
+        self.cross_walk_found = False
+        self.cross_walk_height = None
 
         # LiDAR state
         self.latest_lidar_avg = None
@@ -127,6 +134,13 @@ class MotionNode(Node):
         self.obstacle_height = float(match.group(3))
         # self.get_logger().info(f"[Obstacle] detected={obstacle_detected}, area={area}, lane={self.current_lane}")
 
+    def cross_walk_callback(self, msg: CrossWalk):
+        if self.is_changing_lane :
+            return
+        self.cross_walk_found = msg.found
+        self.cross_walk_height = msg.height 
+
+        
 
     def get_lane_config(self):  
         if self.current_lane == 1:
@@ -225,7 +239,7 @@ class MotionNode(Node):
         
 
         # ==================================== 신호등 정지 로직 ====================================
-        elif self.traffic_light_detected and self.traffic_light_area > self.traffic_area_threshold and self.traffic_light_color == 'red':
+        elif self.traffic_light_detected and self.cross_walk_found  and self.traffic_light_color == 'red' and self.cross_walk_height > self.cross_walk_height_threshold :
             cmd.left_speed = 0
             cmd.right_speed = 0
             cmd.steering = 0
