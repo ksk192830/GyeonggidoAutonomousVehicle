@@ -31,6 +31,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/OutLine.msg"
   "msg/EndLine.msg"
   "msg/State.msg"
+  "msg/CrossWalk.msg"
   DEPENDENCIES std_msgs sensor_msgs geometry_msgs
 )
 
