@@ -24,12 +24,11 @@ class MotionNode(Node):
         self.motion_pub = self.create_publisher(MotionCommand, 'motion_command', 10)
 
         # traffic light
-        self.traffic_area_threshold = 28000
         self.red_required_count = 3
         self.red_clear_required_count = 3
 
         # crosswalk
-        self.cross_walk_height_threshold = 500
+        self.cross_walk_height_threshold = 550
 
         # 상태 변수
         self.current_lane = 2
@@ -53,12 +52,12 @@ class MotionNode(Node):
 
         # 라이다로 2차선에서 1차선 변경용
         self.lidar_lane_change_counter   = 0
-        self.lidar_lane_change_threshold = 5
+        self.lidar_lane_change_threshold = 3
 
         # 카메라로 1차선에서 2차선 변경용
-        self.front_vehicle_height = 380
+        self.front_vehicle_height = 430
         self.camera_lane_change_counter = 0
-        self.camera_lane_change_threshold = 1 # 수정 필요
+        self.camera_lane_change_threshold = 3 # 수정 필요
 
 
         # 연속 장애물 없음 감지용 변수
@@ -203,7 +202,7 @@ class MotionNode(Node):
         # ==========================================================
 
         # ================= 목표를 1차선에서  2차선 변경 ================
-        if self.current_lane == 1 and self.obstacle_detected :
+        if self.current_lane == 1 and self.obstacle_detected and not  self.is_changing_lane :
             if self.obstacle_height > self.front_vehicle_height:
                 self.camera_lane_change_counter += 1
             else:
@@ -214,7 +213,7 @@ class MotionNode(Node):
                 self.is_changing_lane = True
                 self.get_logger().info(
                     f"{self.camera_lane_change_threshold}회 연속 감지 "
-                    f"🔄 🔄 🔄 🔄 🔄 🔄 🔄"
+                    f"🚧🚧🚧🚧🚧🚧🚧🚧🚧"
                 )
                 self.lidar_lane_change_counter = 0
                 return
@@ -236,7 +235,7 @@ class MotionNode(Node):
                 self.is_changing_lane = False
                 self.latest_lidar_avg = None
                 self.get_logger().info(f"✅ Lane change complete: now on lane {self.current_lane}")
-        
+         
 
         # ==================================== 신호등 정지 로직 ====================================
         elif self.traffic_light_detected and self.cross_walk_found  and self.traffic_light_color == 'red' and self.cross_walk_height > self.cross_walk_height_threshold :
