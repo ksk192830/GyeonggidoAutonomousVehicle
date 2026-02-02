@@ -14,8 +14,9 @@ const int POT = A0;
 const int STEERING_SPEED = 150;
 
 // 가변저항 값 범위
-const int resistance_most_left = 633; //가변저항값 수정 필
-const int resistance_most_right = 445;
+const int resistance_most_left = 643; //가변저항값 수정 필
+const int resistance_most_right = 463;
+const int middle_resistance = (resistance_most_left + resistance_most_right) / 2;
 
 // 조향 최대 단계 수 (한 쪽 기준)
 const int MAX_STEERING_STEP = 10;
@@ -68,6 +69,8 @@ void loop() {
 
         // 조향 상태에 따라 동작 제어
         if (mapped_resistance == angle) {
+            maintainSteering();
+        } else if (abs(mapped_resistance - middle_resistance) < 3 ) {
             maintainSteering();
         } else if (mapped_resistance > angle) {
             steerLeft();
