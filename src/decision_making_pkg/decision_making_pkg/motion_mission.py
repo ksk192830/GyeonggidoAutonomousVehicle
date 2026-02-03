@@ -28,7 +28,7 @@ class MotionNode(Node):
         self.red_clear_required_count = 3
 
         # crosswalk
-        self.cross_walk_height_threshold = 550
+        self.cross_walk_height_threshold = 470
 
         # 상태 변수
         self.current_lane = 2
@@ -55,9 +55,13 @@ class MotionNode(Node):
         self.lidar_lane_change_threshold = 3
 
         # 카메라로 1차선에서 2차선 변경용
-        self.front_vehicle_height = 430
+        self.front_vehicle_height = 400
         self.camera_lane_change_counter = 0
         self.camera_lane_change_threshold = 3 # 수정 필요
+
+        # 신호등 정지 
+        self.traffic_light_stop_counter = 0
+        self.traffic_light_stop_threshold = 5
 
 
         # 연속 장애물 없음 감지용 변수
@@ -211,10 +215,10 @@ class MotionNode(Node):
             if self.camera_lane_change_counter >= self.camera_lane_change_threshold:
                 self.target_lane = 2
                 self.is_changing_lane = True
-                self.get_logger().info(
-                    f"{self.camera_lane_change_threshold}회 연속 감지 "
-                    f"🚧🚧🚧🚧🚧🚧🚧🚧🚧"
-                )
+                # self.get_logger().info(
+                #     f"{self.camera_lane_change_threshold}회 연속 감지 "
+                #     f"🚧🚧🚧🚧🚧🚧🚧🚧🚧"
+                # )
                 self.lidar_lane_change_counter = 0
                 return
         # ==========================================================
@@ -224,7 +228,7 @@ class MotionNode(Node):
 
         # Lane change logic
         if self.is_changing_lane:
-            self.get_logger().info(f"🔄🔄\n")
+            # self.get_logger().info(f"🔄🔄\n")
             cmd.steering = -10 if self.target_lane == 1 else 10
             cmd.left_speed = lane_change_speed
             cmd.right_speed = lane_change_speed
@@ -238,23 +242,22 @@ class MotionNode(Node):
          
 
         # ==================================== 신호등 정지 로직 ====================================
-        elif self.traffic_light_detected and self.cross_walk_found  and self.traffic_light_color == 'red' and self.cross_walk_height > self.cross_walk_height_threshold :
-            cmd.left_speed = 0
-            cmd.right_speed = 0
-            cmd.steering = 0
-            self.get_logger().info("🛑 Red light detected: stopping vehicle")
+        elif self.traffic_light_detected and self.cross_walk_found  and self.traffic_light_color == 'red' :
+            if self.cross_walk_height > self.cross_walk_height_threshold : 
+                self.traffic_light_stop_counter += 1
+            else:
+                self.traffic_light_stop_counter = 0
 
-        elif self.traffic_light_detected:
-            cmd.left_speed = normal_speed
-            cmd.right_speed = normal_speed
-            cmd.steering = int(steering_value)
-            # self.red_detect_counter = 0
-            # if self.wait_for_red_clear:
-            #     self.red_clear_counter += 1
-            #     if self.red_clear_counter >= self.red_clear_required_count:
-            #         self.wait_for_red_clear = False
-            #         self.red_clear_counter = 0
-            #         self.get_logger().info("🟢 Red light cleared: resuming")
+            if self.traffic_light_stop_counter > self.traffic_light_stop_threshold :
+                cmd.left_speed = 0
+                cmd.right_speed = 0
+                cmd.steering = 0
+                self.get_logger().info("🛑 Red light detected: stopping vehicle")
+
+        # elif self.traffic_light_detected:
+        #     cmd.left_speed = normal_speed
+        #     cmd.right_speed = normal_speed
+        #     cmd.steering = int(steering_value)
         # ================================================================================================  
 
     
