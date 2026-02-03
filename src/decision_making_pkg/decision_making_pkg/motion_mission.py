@@ -243,6 +243,11 @@ class MotionNode(Node):
 
         # ==================================== 신호등 정지 로직 ====================================
         elif self.traffic_light_detected and self.cross_walk_found  and self.traffic_light_color == 'red' :
+            
+            cmd.left_speed = normal_speed
+            cmd.right_speed = normal_speed
+            cmd.steering = int(steering_value)
+            
             if self.cross_walk_height > self.cross_walk_height_threshold : 
                 self.traffic_light_stop_counter += 1
             else:
