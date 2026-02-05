@@ -3,7 +3,7 @@
 import os
 import cv2
 
-IMAGE_DIR = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear/"
+IMAGE_DIR = "/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear/"
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp")
 

@@ -5,9 +5,9 @@ from launch.actions import SetEnvironmentVariable
 def generate_launch_description():
 
     # 각 카메라에 맞는 모델 경로
-    cam0_model_path = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/parking_front.pt"
-    cam1_model_path = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/parking_rear.pt"
-    rviz_config = "/home/sg/gyeonggi_ws/src/control_pkg/rviz/final_parking.rviz"
+    cam0_model_path = "/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/model/parking_front.pt"
+    cam1_model_path = "/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/model/parking_rear.pt"
+    rviz_config = "/home/kimmyungkyun/gyeonggi_ws/src/control_pkg/rviz/final_parking.rviz"
 
 
     return LaunchDescription([
@@ -18,11 +18,11 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                {'data_source': 'image'},
-                # {'data_source': 'camera'},  # camera, video, image 선택
+                # {'data_source': 'image'},
+                {'data_source': 'camera'},  # camera, video, image 선택
 
                 {'cam_num': 0},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/parking_front'},
+                {'img_dir': '/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/parking_front'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
@@ -38,12 +38,12 @@ def generate_launch_description():
             name='cam1',
             namespace='cam1',
             parameters=[
-                {'data_source': 'image'},
-                # {'data_source': 'camera'},  # camera, video, image 선택
-                # {'rotate_mode': 1},
+                # {'data_source': 'image'},
+                {'data_source': 'camera'},  # camera, video, image 선택
+                {'rotate_mode': 1},
 
                 {'cam_num': 2},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/parking_rear'},
+                {'img_dir': '/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/parking_rear'},
                 {'pub_topic': '/cam1/image_raw'},
                 {'window_name': 'Raw 1'},
                 {'show_image': False},
@@ -135,7 +135,7 @@ def generate_launch_description():
         #     name="parking_map_viz",
         #     output="screen",
         #     parameters=[{
-        #         "yaml_path": "/home/sg/gyeonggi_ws/src/decision_making_pkg/decision_making_pkg/config/parking_map.yaml",
+        #         "yaml_path": "/home/kimmyungkyun/gyeonggi_ws/src/decision_making_pkg/decision_making_pkg/config/parking_map.yaml",
         #         "frame_id": "map",
         #         "topic": "/parking_map/markers",
 

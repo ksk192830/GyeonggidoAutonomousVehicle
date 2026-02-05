@@ -13,7 +13,7 @@ class ImageSaverNode(Node):
         super().__init__('image_saver')
 
         self.declare_parameter('sub_topic', '/cam0/image_raw')
-        self.declare_parameter('save_dir', '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear_new')
+        self.declare_parameter('save_dir', '/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear_new')
         self.declare_parameter('frame_interval', 1)
         self.declare_parameter('image_format', 'png')
         self.declare_parameter("prefix", "image")

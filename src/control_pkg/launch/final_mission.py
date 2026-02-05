@@ -6,9 +6,9 @@ import os
 
 def generate_launch_description():
      # 각 카메라에 맞는 모델 경로
-    cam0_model_path = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/track.pt"
-    cam0_model_path_cw = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/crosswalk.pt"
-    rviz_config = "/home/sg/gyeonggi_ws/src/control_pkg/rviz/final_mission.rviz"
+    cam0_model_path = "/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/model/track.pt"
+    cam0_model_path_cw = "/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/model/crosswalk.pt"
+    rviz_config = "/home/kimmyungkyun/gyeonggi_ws/src/control_pkg/rviz/final_mission.rviz"
 
     return LaunchDescription([
         
@@ -20,16 +20,16 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                {'data_source': 'image'},  # camera, video, image 선택
-                # {'data_source': 'camera'},
 
+                # {'data_source': 'image'},  # camera, video, image 선택
+                {'data_source': 'camera'},
                 {'cam_num': 0}, # 포트 확인   ls /dev/video*
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/mission'},
+                {'img_dir': '/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/mission'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
-                # {'timer_period': 0.03},  # float형으로, fps조절 
-                {'timer_period': 0.1},
+                {'timer_period': 0.03},  # float형으로, fps조절 
+                # {'timer_period': 0.1},
             ]
         ),
         

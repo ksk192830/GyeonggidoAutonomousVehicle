@@ -57,7 +57,7 @@ class MotionNode(Node):
         self.lidar_lane_change_threshold = 3
 
         # 카메라로 1차선에서 2차선 변경용
-        self.front_vehicle_height = 400
+        self.front_vehicle_height = 370
         self.camera_lane_change_counter = 0
         self.camera_lane_change_threshold = 3 # 수정 필요
 
@@ -235,7 +235,7 @@ class MotionNode(Node):
         # Lane change logic
         if self.is_changing_lane:
             self.get_logger().info(f"🔄🔄\n")
-            cmd.steering = -8 if self.target_lane == 1 else 7
+            cmd.steering = -9 if self.target_lane == 1 else 7
             cmd.left_speed = lane_change_speed
             cmd.right_speed = lane_change_speed
 

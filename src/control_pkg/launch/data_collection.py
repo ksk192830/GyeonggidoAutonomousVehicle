@@ -25,7 +25,7 @@ def generate_launch_description():
         #################### IMAGE SAVER (전방) ######################
         DeclareLaunchArgument(
             'cam0_save_dir',
-            default_value='/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_front_new',
+            default_value='/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_front_new',
             description='Directory to save images from cam0'
         ),
         DeclareLaunchArgument(
@@ -66,7 +66,7 @@ def generate_launch_description():
         #################### IMAGE SAVER (후방) ######################
         DeclareLaunchArgument(
             'cam1_save_dir',
-            default_value='/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear_new',
+            default_value='/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear_new',
             description='Directory to save images from cam1'
         ),
         DeclareLaunchArgument(

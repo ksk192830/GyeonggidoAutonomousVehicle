@@ -7,8 +7,8 @@ import os
 
 def generate_launch_description():
      # 각 카메라에 맞는 모델 경로
-    cam0_model_path = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/track.pt"
-    rviz_config = "/home/sg/gyeonggi_ws/src/control_pkg/rviz/final.rviz"
+    cam0_model_path = "/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/model/track.pt"
+    rviz_config = "/home/kimmyungkyun/gyeonggi_ws/src/control_pkg/rviz/final.rviz"
 
     return LaunchDescription([
         #################### CAMERA1(LANE) ######################
@@ -19,10 +19,10 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                {'data_source': 'image'},
-                # {'data_source': 'camera'},  # camera, video, image 선택
-                {'cam_num': 2},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/lane2'},
+                # {'data_source': 'image'},
+                {'data_source': 'camera'},  # camera, video, image 선택
+                {'cam_num': 0},
+                {'img_dir': '/home/kimmyungkyun/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/lane2'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},

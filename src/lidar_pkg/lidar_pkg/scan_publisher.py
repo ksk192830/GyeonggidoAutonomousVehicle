@@ -37,7 +37,7 @@ ANGLE_MAX = 2 * math.pi
 
 # distance range [m]
 RANGE_MIN = 0.0
-RANGE_MAX = 3.5
+RANGE_MAX = 4.0
 
 # angle offset in degree
 ANGLE_OFFSET_DEG = 180.0
