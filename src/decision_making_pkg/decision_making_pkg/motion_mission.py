@@ -256,6 +256,7 @@ class MotionNode(Node):
 
             if self.traffic_light_stop_counter > self.traffic_light_stop_threshold :
                 self.stop_state = True
+                self.get_logger().info("🛑 Red light detected: stopping vehicle")
 
             cmd.left_speed = normal_speed
             cmd.right_speed = normal_speed
@@ -289,7 +290,6 @@ class MotionNode(Node):
             # self.get_logger().info(f"mapped: {mapped:.1f}, adjust: {adjust:.1f}, 현재 steer: {steering_value:.1f}")
 
         if self.stop_state :
-            self.get_logger().info("🛑 Red light detected: stopping vehicle")
             cmd.left_speed = 0
             cmd.right_speed = 0
             cmd.steering = 0

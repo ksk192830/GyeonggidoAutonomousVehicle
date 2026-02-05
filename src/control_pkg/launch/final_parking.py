@@ -18,8 +18,8 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                # {'data_source': 'image'},
-                {'data_source': 'camera'},  # camera, video, image 선택
+                {'data_source': 'image'},
+                # {'data_source': 'camera'},  # camera, video, image 선택
 
                 {'cam_num': 0},
                 {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/parking_front'},
@@ -27,7 +27,6 @@ def generate_launch_description():
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
 
-                # {'timer_period': 0.03},  # float형으로, fps조절 
                 {'timer_period': 0.1},
             ]
         ),
@@ -39,17 +38,16 @@ def generate_launch_description():
             name='cam1',
             namespace='cam1',
             parameters=[
-                # {'data_source': 'image'},
-                {'data_source': 'camera'},  # camera, video, image 선택
-                {'rotate_mode': 1},
+                {'data_source': 'image'},
+                # {'data_source': 'camera'},  # camera, video, image 선택
+                # {'rotate_mode': 1},
 
                 {'cam_num': 2},
                 {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/parking_rear'},
                 {'pub_topic': '/cam1/image_raw'},
                 {'window_name': 'Raw 1'},
                 {'show_image': False},
-
-                # {'timer_period': 0.03},  # float형으로, fps조절 
+ 
                 {'timer_period': 0.1},
             ]
         ),

@@ -22,6 +22,7 @@ def generate_launch_description():
             parameters=[
                 {'data_source': 'image'},  # camera, video, image 선택
                 # {'data_source': 'camera'},
+
                 {'cam_num': 0}, # 포트 확인   ls /dev/video*
                 {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/mission'},
                 {'pub_topic': '/cam0/image_raw'},
@@ -41,7 +42,8 @@ def generate_launch_description():
             namespace='cam0',
             output='screen',
             parameters=[
-                {'device': 'cpu'},
+                {'device': 'cuda:0'},
+                # {'device': 'cpu'},
                 {'model_path': cam0_model_path},
                 {'threshold': 0.5}
             ],
@@ -61,7 +63,8 @@ def generate_launch_description():
             namespace='cam0',
             output='screen',
             parameters=[
-                {'device': 'cpu'},
+                {'device': 'cuda:0'},
+                # {'device': 'cpu'},
                 {'model_path': cam0_model_path_cw},
                 {'threshold': 0.5}
             ],
