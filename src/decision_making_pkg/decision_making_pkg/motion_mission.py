@@ -57,7 +57,7 @@ class MotionNode(Node):
         self.lidar_lane_change_threshold = 3
 
         # 카메라로 1차선에서 2차선 변경용
-        self.front_vehicle_height = 400
+        self.front_vehicle_height = 380
         self.camera_lane_change_counter = 0
         self.camera_lane_change_threshold = 3 # 수정 필요
 

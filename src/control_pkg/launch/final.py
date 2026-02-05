@@ -19,8 +19,8 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                {'data_source': 'image'},
-                # {'data_source': 'camera'},  # camera, video, image 선택
+                # {'data_source': 'image'},
+                {'data_source': 'camera'},  # camera, video, image 선택
                 {'cam_num': 2},
                 {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/lane2'},
                 {'pub_topic': '/cam0/image_raw'},

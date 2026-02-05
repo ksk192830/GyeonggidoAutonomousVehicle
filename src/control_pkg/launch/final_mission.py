@@ -20,16 +20,16 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                {'data_source': 'image'},  # camera, video, image 선택
-                # {'data_source': 'camera'},
+                # {'data_source': 'image'},  # camera, video, image 선택
+                {'data_source': 'camera'},
 
-                {'cam_num': 0}, # 포트 확인   ls /dev/video*
+                {'cam_num': 2}, # 포트 확인   ls /dev/video*
                 {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/Jjin_track/mission'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
-                # {'timer_period': 0.03},  # float형으로, fps조절 
-                {'timer_period': 0.1},
+                {'timer_period': 0.03},  # float형으로, fps조절 
+                # {'timer_period': 0.1},
             ]
         ),
         
