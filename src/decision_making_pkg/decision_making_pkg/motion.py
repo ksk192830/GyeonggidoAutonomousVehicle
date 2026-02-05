@@ -116,7 +116,7 @@ class MotionNode(Node):
 
         # 차선 변경을 위한 상태 관리
         if self.current_lane != self.target_lane:
-            self.is_changing_lane = True
+            self.is_changing_lane = False
 
         if self.is_changing_lane and self.current_lane == self.target_lane and abs(vehicle_position_x) <= 200:
             self.is_changing_lane = False

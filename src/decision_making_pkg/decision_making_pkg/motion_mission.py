@@ -235,7 +235,7 @@ class MotionNode(Node):
         # Lane change logic
         if self.is_changing_lane:
             self.get_logger().info(f"🔄🔄\n")
-            cmd.steering = -10 if self.target_lane == 1 else 7
+            cmd.steering = -8 if self.target_lane == 1 else 7
             cmd.left_speed = lane_change_speed
             cmd.right_speed = lane_change_speed
 

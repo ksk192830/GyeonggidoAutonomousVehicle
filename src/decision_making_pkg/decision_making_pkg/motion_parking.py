@@ -24,7 +24,7 @@ class ParkingNode(Node):
         self.end_line_angle_weight = -50
 
         self.out_line_position_weight = 0.5
-        self.out_line_angle_weight = 10
+        self.out_line_angle_weight = 20
         
         self.obstacle_in_right = False          # 최종 결과 (update_searching에서 쓰는 값)
         self.obstacle_detect = 0           # 연속으로 조건 만족한 횟수
@@ -261,7 +261,7 @@ class ParkingNode(Node):
             steer_angle = self.out_line_yaw * self.out_line_angle_weight
             
             mapped_steering = steer_position + steer_angle
-            mapped_steering = max(min(mapped_steering, 10.0), -10.0)
+            mapped_steering = max(min(mapped_steering, 10.0), 0.0)
             mapped_speed = 100
             
             self.get_logger().info(f"position: {steer_position:.1f}\nangle: {steer_angle:.1f}\n최종 steer: {mapped_steering:.1f}\n\n\n")
