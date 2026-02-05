@@ -19,7 +19,7 @@ class ParkingNode(Node):
         self.parking_line_angle_weight = 0.5
 
         self.parking_space_position_weight = 10
-        self.parking_space_angle_weight = 15
+        self.parking_space_angle_weight = 12
 
         self.end_line_angle_weight = -50
 
@@ -72,7 +72,7 @@ class ParkingNode(Node):
         # SEARCHING 상태에서만 장애물 체크
         if self.state == "SEARCHING_SPACE":
             # 우측 감지
-            condition_met = self.check_obstacle_sector(msg, target_deg=270.0)
+            condition_met = self.check_obstacle_sector(msg, target_deg=275.0)
 
             if condition_met:
                 self.obstacle_detect += 1

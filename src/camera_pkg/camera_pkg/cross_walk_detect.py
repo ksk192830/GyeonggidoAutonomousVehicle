@@ -25,7 +25,7 @@ class CrossWalkNode(Node):
         )
 
         image_topic = "/cam0/image_raw"
-        detection_topic = "/cam0/detections"
+        detection_topic = "/cam0/detections_cw"
         mask_topic = "/cam0/cross_walk_mask"
         result_topic = "cross_walk_result"
 

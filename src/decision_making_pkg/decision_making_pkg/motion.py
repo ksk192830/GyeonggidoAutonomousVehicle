@@ -31,13 +31,13 @@ class MotionNode(Node):
         self.clear_counter = 0
 
         # lane 1 설정
-        self.lane1_angle_weight = 0.65 # 원래 0.75
+        self.lane1_angle_weight = 0.75 # 원래 0.75
         self.lane1_position_weight = 0.05
         self.lane1_normal_speed =255
         self.lane1_lane_change_speed = 255
 
         # lane 2 설정
-        self.lane2_angle_weight = 0.6 # 원래 0.7
+        self.lane2_angle_weight = 0.7 # 원래 0.7
         self.lane2_position_weight = 0.05
         self.lane2_normal_speed = 255
         self.lane2_lane_change_speed = 255

@@ -24,11 +24,13 @@ class MotionNode(Node):
         self.motion_pub = self.create_publisher(MotionCommand, 'motion_command', 10)
 
         # traffic light
-        self.red_required_count = 3
-        self.red_clear_required_count = 3
+        self.traffic_light_stop_counter = 0
+        self.traffic_light_stop_threshold = 5
+        self.traffic_light_start_counter = 0
+        self.traffic_light_start_threshold = 5        
 
         # crosswalk
-        self.cross_walk_height_threshold = 550
+        self.cross_walk_height_threshold = 435
 
         # 상태 변수
         self.current_lane = 2
@@ -55,7 +57,7 @@ class MotionNode(Node):
         self.lidar_lane_change_threshold = 3
 
         # 카메라로 1차선에서 2차선 변경용
-        self.front_vehicle_height = 430
+        self.front_vehicle_height = 400
         self.camera_lane_change_counter = 0
         self.camera_lane_change_threshold = 3 # 수정 필요
 
@@ -67,14 +69,17 @@ class MotionNode(Node):
         # lane 1 설정
         self.lane1_angle_weight = 0.75
         self.lane1_position_weight = 0.05
-        self.lane1_normal_speed = 200
-        self.lane1_lane_change_speed = 200
+        self.lane1_normal_speed = 255
+        self.lane1_lane_change_speed = 255
 
         # lane 2 설정
         self.lane2_angle_weight = 0.7
         self.lane2_position_weight = 0.05
-        self.lane2_normal_speed = 200
-        self.lane2_lane_change_speed = 200
+        self.lane2_normal_speed = 255
+        self.lane2_lane_change_speed = 255
+
+        self.stop_state = False
+        self.red_clear_counter = 0
 
 
     def lidar_callback(self, msg: LaserScan):
@@ -163,6 +168,8 @@ class MotionNode(Node):
         self.traffic_light_area = float(match.group(2))
         self.traffic_light_color = (match.group(3) or '').lower()
 
+
+
     def lane_info_callback(self, msg: LaneInfo):
         
 
@@ -178,6 +185,9 @@ class MotionNode(Node):
         adjust = - vehicle_position_x * position_weight
         adjust = max(-3, min(adjust, 3))
         steering_value = max(-10, min(mapped + adjust, 10))
+
+        
+
 
 
         # ================= 목표를 2차선에서  1차선 변경 ================
@@ -225,7 +235,7 @@ class MotionNode(Node):
         # Lane change logic
         if self.is_changing_lane:
             self.get_logger().info(f"🔄🔄\n")
-            cmd.steering = -10 if self.target_lane == 1 else 10
+            cmd.steering = -10 if self.target_lane == 1 else 7
             cmd.left_speed = lane_change_speed
             cmd.right_speed = lane_change_speed
 
@@ -236,25 +246,39 @@ class MotionNode(Node):
                 self.latest_lidar_avg = None
                 self.get_logger().info(f"✅ Lane change complete: now on lane {self.current_lane}")
          
-
         # ==================================== 신호등 정지 로직 ====================================
-        elif self.traffic_light_detected and self.cross_walk_found  and self.traffic_light_color == 'red' and self.cross_walk_height > self.cross_walk_height_threshold :
-            cmd.left_speed = 0
-            cmd.right_speed = 0
-            cmd.steering = 0
-            self.get_logger().info("🛑 Red light detected: stopping vehicle")
+
+        elif self.traffic_light_detected and self.cross_walk_found  and self.traffic_light_color == 'red' :
+            if self.cross_walk_height > self.cross_walk_height_threshold:
+                self.traffic_light_stop_counter += 1
+            else: 
+                self.traffic_light_stop_counter = 0
+
+            if self.traffic_light_stop_counter > self.traffic_light_stop_threshold :
+                self.stop_state = True
+
+            cmd.left_speed = normal_speed
+            cmd.right_speed = normal_speed
+            cmd.steering = int(steering_value)
+
+        elif self.traffic_light_detected and self.cross_walk_found:
+            if self.traffic_light_color == 'green':
+                self.traffic_light_start_counter += 1
+            else: 
+                self.traffic_light_start_counter = 0
+            
+            if self.traffic_light_start_counter > self.traffic_light_start_threshold :
+                self.stop_state = False
+                self.get_logger().info("🟢 Red light cleared: resuming")
+            
+            cmd.left_speed = normal_speed
+            cmd.right_speed = normal_speed
+            cmd.steering = int(steering_value)
 
         elif self.traffic_light_detected:
             cmd.left_speed = normal_speed
             cmd.right_speed = normal_speed
             cmd.steering = int(steering_value)
-            # self.red_detect_counter = 0
-            # if self.wait_for_red_clear:
-            #     self.red_clear_counter += 1
-            #     if self.red_clear_counter >= self.red_clear_required_count:
-            #         self.wait_for_red_clear = False
-            #         self.red_clear_counter = 0
-            #         self.get_logger().info("🟢 Red light cleared: resuming")
         # ================================================================================================  
 
     
@@ -263,6 +287,12 @@ class MotionNode(Node):
             cmd.right_speed = normal_speed
             cmd.steering = int(steering_value)
             # self.get_logger().info(f"mapped: {mapped:.1f}, adjust: {adjust:.1f}, 현재 steer: {steering_value:.1f}")
+
+        if self.stop_state :
+            self.get_logger().info("🛑 Red light detected: stopping vehicle")
+            cmd.left_speed = 0
+            cmd.right_speed = 0
+            cmd.steering = 0
 
         self.motion_pub.publish(cmd)
     
