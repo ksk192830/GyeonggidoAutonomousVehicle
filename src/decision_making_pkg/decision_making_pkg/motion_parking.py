@@ -19,7 +19,7 @@ class ParkingNode(Node):
         self.parking_line_angle_weight = 0.5
 
         self.parking_space_position_weight = 10
-        self.parking_space_angle_weight = 12
+        self.parking_space_angle_weight = 11
 
         self.end_line_angle_weight = -50
 
