@@ -137,11 +137,14 @@ class LidarScanNode(Node):
 
         except StopIteration:
             self.get_logger().error("Failed to get LIDAR scan (StopIteration)")
+            self.get_logger().error("❌" * 60) 
         except LPFL.RPLidarException as e:
             self.get_logger().error(f"RPLidar exception: {e}")
+            self.get_logger().error("❌" * 60) 
             self.reset_lidar()
         except ValueError as e:
             self.get_logger().error(f"ValueError: {e}")
+            self.get_logger().error("❌" * 60) 
             self.reset_lidar()
 
     def build_laserscan_msg_from_measurements(

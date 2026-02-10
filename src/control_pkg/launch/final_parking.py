@@ -156,6 +156,19 @@ def generate_launch_description():
                 {'allowed_states': ['SEARCHING_SPACE']},
             ]
         ),
+
+        #################### LIDAR VISUALIZER ######################
+        Node(
+            package='lidar_pkg',
+            executable='scan_viz',   
+            name='scan_viz',
+            output='screen',
+            parameters=[
+                {'sub_topic': '/scan_raw'},
+                {'window_name': 'Lidar Scan Viewer'},
+            ]
+        ),
+
         # #################### LIDAR Cluster ######################
         # Node(
         #     package='lidar_pkg',          # your package name

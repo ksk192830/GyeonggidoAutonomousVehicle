@@ -18,8 +18,8 @@ class ParkingNode(Node):
         self.parking_line_position_weight = 135
         self.parking_line_angle_weight = 0.5
 
-        self.parking_space_position_weight = 10
-        self.parking_space_angle_weight = 11
+        self.parking_space_position_weight = 14
+        self.parking_space_angle_weight = 14
 
         self.end_line_angle_weight = -50
 
@@ -28,7 +28,7 @@ class ParkingNode(Node):
         
         self.obstacle_in_right = False          # 최종 결과 (update_searching에서 쓰는 값)
         self.obstacle_detect = 0           # 연속으로 조건 만족한 횟수
-        self.required_num = 3         # 몇 번 연속일 때 True로 볼지
+        self.required_num = 2         # 몇 번 연속일 때 True로 볼지
         
         self.parking_space_found_num = 0
         self.parking_space_required_num = 5
@@ -72,14 +72,16 @@ class ParkingNode(Node):
         # SEARCHING 상태에서만 장애물 체크
         if self.state == "SEARCHING_SPACE":
             # 우측 감지
-            condition_met = self.check_obstacle_sector(msg, target_deg=275.0)
+            condition_met = self.check_obstacle_sector(msg, target_deg=269.0)
 
             if condition_met:
                 self.obstacle_detect += 1
+                self.get_logger().info("🔴")
                 if self.obstacle_detect >= self.required_num:
                     self.obstacle_in_right = True
             else:
                 self.obstacle_detect = 0
+                self.get_logger().info("🟠")
 
     def parking_line_callback(self, msg: ParkingLot):
         self.parking_line_found = msg.found

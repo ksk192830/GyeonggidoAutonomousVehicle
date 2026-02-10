@@ -194,8 +194,10 @@ class MotionNode(Node):
         if self.current_lane == 2 and not self.lidar_lane_change_executed:
             if self.latest_lidar_avg is not None and self.latest_lidar_avg < 1.0:
                 self.lidar_lane_change_counter += 1
+                self.get_logger().info("🔴")
             else:
                 self.lidar_lane_change_counter = 0
+                self.get_logger().info("🟠")
 
             if self.lidar_lane_change_counter >= self.lidar_lane_change_threshold:
                 if self.once:
