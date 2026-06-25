@@ -48,7 +48,7 @@ class ParkingMapVizNode(Node):
     def __init__(self) -> None:
         super().__init__("parking_map_viz")
 
-        default_yaml = "/home/sg/gyeonggi_ws/src/decision_making_pkg/decision_making_pkg/config/parking_map.yaml"
+        default_yaml = "/home/sg/skku_4th/src/decision_making_pkg/decision_making_pkg/config/parking_map.yaml"
 
         # Parameters (launch에서 모두 덮어쓸 수 있음)
         self.declare_parameter("yaml_path", default_yaml)

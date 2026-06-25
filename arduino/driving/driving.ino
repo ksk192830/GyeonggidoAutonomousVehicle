@@ -4,18 +4,18 @@ const unsigned int MAX_INPUT = 15;
 // 핀 번호 변수
 const int STEERING_1 = 3;
 const int STEERING_2 = 2;
-const int FORWARD_RIGHT_1 = 6;
-const int FORWARD_RIGHT_2 = 7;
-const int FORWARD_LEFT_1 = 5;
-const int FORWARD_LEFT_2 =4;
+const int FORWARD_RIGHT_1 = 7;
+const int FORWARD_RIGHT_2 = 6;
+const int FORWARD_LEFT_1 = 4;
+const int FORWARD_LEFT_2 =5;
 const int POT = A0;
 
 // 조향 속도 상수
 const int STEERING_SPEED = 150;
 
 // 가변저항 값 범위
-const int resistance_most_left = 633; //가변저항값 수정 필
-const int resistance_most_right = 445;
+const int resistance_most_left = 427; //가변저항값 수정 필
+const int resistance_most_right = 310;
 
 // 조향 최대 단계 수 (한 쪽 기준)
 const int MAX_STEERING_STEP = 10;

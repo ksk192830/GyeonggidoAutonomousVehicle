@@ -24,7 +24,7 @@ IMAGE_SIZE = 800
 DISPLAY_RANGE_MAX = 4.0
 
 # Car image path
-CAR_IMAGE_PATH = '/home/kimmyungkyun/gyeonggi_ws/src/lidar_pkg/lidar_pkg/lib/car.png'
+CAR_IMAGE_PATH = '/home/kimmyungkyun/skku_4th/src/lidar_pkg/lidar_pkg/lib/car.png'
 
 # Car image size
 CAR_IMAGE_WIDTH = 120

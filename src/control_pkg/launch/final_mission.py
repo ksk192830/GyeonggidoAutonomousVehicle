@@ -6,8 +6,8 @@ import os
 
 def generate_launch_description():
      # 각 카메라에 맞는 모델 경로
-    cam0_model_path = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/track.pt"
-    rviz_config = "/home/sg/gyeonggi_ws/src/control_pkg/rviz/final_mission.rviz"
+    cam0_model_path = "/home/sg/skku_4th/src/camera_pkg/camera_pkg/model/track.pt"
+    rviz_config = "/home/sg/skku_4th/src/control_pkg/rviz/final_mission.rviz"
 
     return LaunchDescription([
         
@@ -19,10 +19,10 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                {'data_source': 'image'},  # camera, video, image 선택
-                # {'data_source': 'camera'},
+                # {'data_source': 'image'},  # camera, video, image 선택
+                {'data_source': 'camera'},
                 {'cam_num': 2}, # 포트 확인   ls /dev/video*
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/mission4'},
+                {'img_dir': '/home/sg/skku_4th/src/camera_pkg/camera_pkg/lib/mission4'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},

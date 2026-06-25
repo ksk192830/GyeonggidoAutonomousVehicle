@@ -5,9 +5,9 @@ from launch.actions import SetEnvironmentVariable
 def generate_launch_description():
 
     # 각 카메라에 맞는 모델 경로
-    cam0_model_path = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/parking_front.pt"
-    cam1_model_path = "/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/model/parking_rear.pt"
-    rviz_config = "/home/sg/gyeonggi_ws/src/control_pkg/rviz/final_parking.rviz"
+    cam0_model_path = "/home/sg/skku_4th/src/camera_pkg/camera_pkg/model/parking_front.pt"
+    cam1_model_path = "/home/sg/skku_4th/src/camera_pkg/camera_pkg/model/parking_rear.pt"
+    rviz_config = "/home/sg/skku_4th/src/control_pkg/rviz/final_parking.rviz"
 
 
     return LaunchDescription([
@@ -22,7 +22,7 @@ def generate_launch_description():
                 # {'data_source': 'camera'},  # camera, video, image 선택
 
                 {'cam_num': 2},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_front_perfect(slot2)'},
+                {'img_dir': '/home/sg/skku_4th/src/camera_pkg/camera_pkg/lib/parking_front_perfect(slot2)'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
@@ -44,7 +44,7 @@ def generate_launch_description():
                 # {'rotate_mode': 1},
 
                 {'cam_num': 4},
-                {'img_dir': '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/parking_rear_perfect(slot2)'},
+                {'img_dir': '/home/sg/skku_4th/src/camera_pkg/camera_pkg/lib/parking_rear_perfect(slot2)'},
                 {'pub_topic': '/cam1/image_raw'},
                 {'window_name': 'Raw 1'},
                 {'show_image': False},
@@ -137,7 +137,7 @@ def generate_launch_description():
         #     name="parking_map_viz",
         #     output="screen",
         #     parameters=[{
-        #         "yaml_path": "/home/sg/gyeonggi_ws/src/decision_making_pkg/decision_making_pkg/config/parking_map.yaml",
+        #         "yaml_path": "/home/sg/skku_4th/src/decision_making_pkg/decision_making_pkg/config/parking_map.yaml",
         #         "frame_id": "map",
         #         "topic": "/parking_map/markers",
 

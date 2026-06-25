@@ -12,7 +12,7 @@ from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReli
 # ===== 사용자 설정 =====
 DATA_SOURCE = 'camera'  # camera, image, video 중 하나
 CAM_NUM = 0
-IMAGE_DIRECTORY_PATH = '/home/sg/gyeonggi_ws/src/camera_pkg/camera_pkg/lib/lane2'
+IMAGE_DIRECTORY_PATH = '/home/sg/skku_4th/src/camera_pkg/camera_pkg/lib/lane2'
 VIDEO_FILE_PATH = '/absolute/path/to/your/video.mp4'
 SHOW_IMAGE = True
 TIMER = 0.03
